@@ -2,10 +2,26 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 import re
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 import uuid
+
+# Model names for auxiliary LLM calls (hint generation / answer-type detection /
+# final answer extraction). Overridable via env so non-OpenAI-official routers
+# without "o3"/"gpt-4.1" can substitute their own models. Read at call time:
+# this module is imported before dotenv.load_dotenv() runs in the entrypoints.
+def _hint_model() -> str:
+    return os.environ.get("HINT_LLM_MODEL_NAME", "o3")
+
+
+def _answer_type_model() -> str:
+    return os.environ.get("ANSWER_TYPE_LLM_MODEL_NAME", "gpt-4.1")
+
+
+def _final_answer_model() -> str:
+    return os.environ.get("FINAL_ANSWER_LLM_MODEL_NAME", "o3")
 
 
 def _generate_message_id() -> str:
@@ -76,7 +92,7 @@ Here is the question:
         content = f"[{message_id}] {content}"
 
     response = await client.chat.completions.create(
-        model="o3",
+        model=_hint_model(),
         messages=[{"role": "user", "content": content}],
         reasoning_effort="high",
     )
@@ -119,7 +135,7 @@ Return exactly one of the [number, date, time, string], nothing else.
 
     message_id = _generate_message_id()
     response = await client.chat.completions.create(
-        model="gpt-4.1",
+        model=_answer_type_model(),
         messages=[{"role": "user", "content": f"[{message_id}] {instruction}"}],
     )
     answer_type = response.choices[0].message.content
@@ -462,7 +478,7 @@ The boxed content must be **one** of:
 
     message_id = _generate_message_id()
     response = await client.chat.completions.create(
-        model="o3",
+        model=_final_answer_model(),
         messages=[{"role": "user", "content": f"[{message_id}] {full_prompt}"}],
     )
     result = response.choices[0].message.content
@@ -610,7 +626,7 @@ async def extract_browsecomp_zh_final_answer(
 
     message_id = _generate_message_id()
     response = await client.chat.completions.create(
-        model="o3",
+        model=_final_answer_model(),
         messages=[{"role": "user", "content": f"[{message_id}] {full_prompt}"}],
         reasoning_effort="medium",
     )

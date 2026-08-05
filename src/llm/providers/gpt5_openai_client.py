@@ -133,7 +133,11 @@ class GPT5OpenAIClient(LLMProviderClientBase):
             if self.repetition_penalty != 1.0:
                 extra_body["repetition_penalty"] = self.repetition_penalty
 
-            assert self.model_name in ["gpt-5-2025-08-07", "gpt-5"]
+            # Accept gpt-5 family variants (e.g. gpt-5.6 on internal routers), not
+            # just the two official OpenAI ids the upstream whitelist allowed.
+            assert self.model_name.startswith("gpt-5"), (
+                f"GPT5OpenAIClient expects a gpt-5 family model, got {self.model_name!r}"
+            )
             params = {
                 "model": self.model_name,
                 "temperature": temperature,
@@ -196,6 +200,31 @@ class GPT5OpenAIClient(LLMProviderClientBase):
             ):
                 logger.debug(f"OpenRouter LLM Context limit exceeded: {error_str}")
                 raise ContextLimitError(f"Context limit exceeded: {error_str}")
+
+            # keendata router rejects very large payloads (e.g. sub-agent final
+            # summaries carrying the whole conversation) with a generic HTTP 500
+            # instead of a recognizable context-length message. Reclassify those
+            # as ContextLimitError so the summary retry ladder truncates history
+            # instead of resending the same oversized request until all retries
+            # are exhausted. Small-payload 5xx stays retryable as a transient.
+            payload_chars = 0
+            if params:
+                try:
+                    payload_chars = len(json.dumps(params.get("messages", [])))
+                except Exception:
+                    payload_chars = 0
+            if (
+                getattr(e, "status_code", None) in (500, 502, 413)
+                and payload_chars > 300_000
+            ):
+                logger.debug(
+                    f"Reclassifying HTTP {getattr(e, 'status_code', None)} on "
+                    f"~{payload_chars}-char payload as context limit: {error_str[:200]}"
+                )
+                raise ContextLimitError(
+                    f"Oversized payload rejected by router (HTTP "
+                    f"{getattr(e, 'status_code', None)}, ~{payload_chars} chars): {error_str}"
+                )
 
             logger.error(
                 f"OpenRouter LLM call failed: {str(e)}, input = {json.dumps(params)}",

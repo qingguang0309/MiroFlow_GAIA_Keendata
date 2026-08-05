@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import re
 
 from src.logging.logger import bootstrap_logger
 
@@ -114,7 +115,40 @@ class OutputFormatter:
                 # If braces are unbalanced, skip this \boxed{ and continue searching
                 i = content_start
 
-        return matches[-1] if matches else ""
+        return self._strip_latex_text_wrapper(matches[-1]) if matches else ""
+
+    @staticmethod
+    def _strip_latex_text_wrapper(content: str) -> str:
+        """
+        Unwrap LaTeX text-style commands that span the whole boxed content,
+        e.g. \\boxed{\\text{Foo Bar}} -> "Foo Bar". Some models (gpt-5.x) add
+        these wrappers, which would fail GAIA exact-match scoring. Only strips
+        when the wrapper encloses the entire content (verified via balanced
+        braces); applied repeatedly for nested wrappers.
+        """
+        pattern = re.compile(
+            r"^\\(?:text|textbf|textit|textrm|texttt|mathrm|mathit)\{(.*)\}$",
+            re.DOTALL,
+        )
+        while True:
+            stripped = content.strip()
+            m = pattern.match(stripped)
+            if not m:
+                return content
+            inner = m.group(1)
+            depth = 0
+            for ch in inner:
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth < 0:
+                        # Closing brace of the wrapper occurs mid-string, e.g.
+                        # "\text{a} and \text{b}" — not a pure wrapper, keep as is.
+                        return content
+            if depth != 0:
+                return content
+            content = inner
 
     def format_tool_result_for_user(self, tool_call_execution_result):
         """
