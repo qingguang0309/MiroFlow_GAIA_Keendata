@@ -63,6 +63,11 @@ Also, consider additional flagging issues such as:
 
 Do NOT attempt to guess or infer correct answers, as complete factual information is not yet available. Your responsibility is purely analytical, proactively flagging points that deserve special attention or clarification during subsequent information collection and task solving. Avoid overanalyzing or listing trivial details that would not materially affect the task outcome.
 
+CRITICAL NEUTRALITY RULES — you are a flagger, not a judge:
+- Never adjudicate between competing interpretations, definitions, formulas, methods, conventions, or data sources. Whenever more than one reading or solution path is plausible, enumerate ALL of them and instruct the solver to work through EACH branch and keep every resulting candidate answer.
+- Never issue negative or exclusionary directives about the solution approach (e.g., "do not assume X", "avoid method Y", "interpretation Z is wrong"). If you suspect a mismatch, phrase it positively: "compute it both under X and under Y and retain both results".
+- Your notes must widen the space of candidate answers the solver keeps, never narrow it. These notes are read at every subsequent step of the solving process, so a premature ruling-out here is irreversible and is the single most damaging mistake you can make.
+
 Here is the question:
 
 """
@@ -249,6 +254,15 @@ Rate conservatively - if unsure between two ranges, choose the lower one.
         + output_format_section
     )
 
+    # Phase-2 fix P0-2 (fix_plan_phase2.md item 2): the extractor must
+    # transcribe the summary's answer, not re-solve the question. Two subset60
+    # tasks were lost to the extractor rewriting a correct final answer.
+    hard_extraction_rules = """* **Verbatim only**: the substantive content of your boxed answer (the value / entity / date / number) MUST appear as-is somewhere in the Agent Summary. You are a transcriber, not a solver: never invent, re-derive, translate, "correct", or transform the answer into something the summary does not itself state. The ONLY changes you may make are the mechanical formatting adjustments required by the rules below.
+* **No extra transformations**: never apply a transformation the question does not explicitly require — no reversing or re-encoding, no unit re-derivation, no spelling "fixes", no undoing or redoing a conversion the summary already performed. If the summary's final answer already directly answers the question as asked, transcribe it as-is.
+* **Counting questions**: if the question asks "how many ..." or otherwise requests a count, the boxed content MUST be a single number (e.g. 6) — never a list, a breakdown, or a sentence.
+* **Total over breakdown**: if the summary contains both a per-category breakdown and an overall total for the asked quantity, use the overall total, not the breakdown.
+* **Override only from within the summary**: you may deviate from the summary's final answer ONLY when the summary's own evidence explicitly contradicts it, and the replacement must itself be stated verbatim in the summary. Formatting fixes per the rules below do not count as deviations."""
+
     full_prompts = {
         "time": f"""# Inputs
 
@@ -259,13 +273,19 @@ Rate conservatively - if unsure between two ranges, choose the lower one.
 
 # Task
 
-1. **Independently derive** the best possible answer, step by step, based solely on evidence and reasoning from the Agent Summary. **Ignore the summary's "Final Answer" field** at this stage.
-2. **Compare** your derived answer to the final answer provided in the Agent Summary (ignoring formatting and phrasing requirements at this stage).  
-– If both are well supported by the summary's evidence, choose the one with stronger or clearer support.  
-– If only one is well supported, use that one.
+1. **Locate the answer in the Agent Summary**: read the summary carefully; take the summary's "Final Answer" as the primary candidate, check it against the evidence the summary itself presents, and note any alternative candidate answers the summary explicitly mentions.
+2. **Choose among the candidates stated in the summary** (ignoring formatting and phrasing requirements at this stage).
+– Keep the summary's final answer unless the summary's own evidence clearly contradicts it and better supports another candidate stated in the summary.
+– If several candidates are comparably supported, prefer the one reflecting the most common, straightforward reading of the question — the answer an ordinary person using everyday consumer tools (web browser, Google Maps, spreadsheet filters) would reach — over the most technical or rigorous reading.
 3. **Revise** your chosen answer to fully satisfy all formatting and phrasing requirements listed below (**Formatting rules**, **Additional constraints**, **Common pitfalls to avoid**, and **Quick reference examples**). These requirements override those in the original question if there is any conflict.
 
 If no answer is clearly supported by the evidence, provide a well-justified educated guess. **Always wrap your final answer in a non-empty \\boxed{{...}}.**
+
+---
+
+# Hard Extraction Rules (mandatory)
+
+{hard_extraction_rules}
 
 ---
 
@@ -315,14 +335,20 @@ The boxed content must be a time.
 
 # Task
 
-1. **Independently derive** the best possible answer, step by step, based solely on evidence and reasoning from the Agent Summary. **Ignore the summary's "Final Answer" field** at this stage.
-2. **Compare** your derived answer to the final answer provided in the Agent Summary (ignoring formatting and phrasing requirements at this stage).  
-– If both are well supported by the summary's evidence, choose the one with stronger or clearer support.  
-– If only one is well supported, use that one.
-– For questions involving calculations, if your answer and the Agent Summary's final answer are numerically similar, prefer the summary's answer.
+1. **Locate the answer in the Agent Summary**: read the summary carefully; take the summary's "Final Answer" as the primary candidate, check it against the evidence the summary itself presents, and note any alternative candidate answers the summary explicitly mentions.
+2. **Choose among the candidates stated in the summary** (ignoring formatting and phrasing requirements at this stage).
+– Keep the summary's final answer unless the summary's own evidence clearly contradicts it and better supports another candidate stated in the summary.
+– If several candidates are comparably supported, prefer the one reflecting the most common, straightforward reading of the question — the answer an ordinary person using everyday consumer tools (web browser, Google Maps, spreadsheet filters) would reach — over the most technical or rigorous reading.
+– For questions involving calculations, if two candidates are numerically similar, prefer the summary's final answer.
 3. **Revise** your chosen answer to fully satisfy all formatting and phrasing requirements listed below (**Formatting rules**, **Additional constraints**, **Common pitfalls to avoid**, and **Quick reference examples**). These requirements override those in the original question if there is any conflict.
 
 If no answer is clearly supported by the evidence, provide a well-justified educated guess. **Always wrap your final answer in a non-empty \\boxed{{...}}.**
+
+---
+
+# Hard Extraction Rules (mandatory)
+
+{hard_extraction_rules}
 
 ---
 
@@ -391,13 +417,19 @@ The boxed content must be a single number.
 
 # Task
 
-1. **Independently derive** the best possible answer, step by step, based solely on evidence and reasoning from the Agent Summary. **Ignore the summary's "Final Answer" field** at this stage.
-2. **Compare** your derived answer to the final answer provided in the Agent Summary (ignoring formatting and phrasing requirements at this stage).  
-– If both are well supported by the summary's evidence, choose the one with stronger or clearer support.  
-– If only one is well supported, use that one.
+1. **Locate the answer in the Agent Summary**: read the summary carefully; take the summary's "Final Answer" as the primary candidate, check it against the evidence the summary itself presents, and note any alternative candidate answers the summary explicitly mentions.
+2. **Choose among the candidates stated in the summary** (ignoring formatting and phrasing requirements at this stage).
+– Keep the summary's final answer unless the summary's own evidence clearly contradicts it and better supports another candidate stated in the summary.
+– If several candidates are comparably supported, prefer the one reflecting the most common, straightforward reading of the question — the answer an ordinary person using everyday consumer tools (web browser, Google Maps, spreadsheet filters) would reach — over the most technical or rigorous reading.
 3. **Revise** your chosen answer to fully satisfy all formatting and phrasing requirements listed below (**Formatting rules**, **Additional constraints**, **Common pitfalls to avoid**, and **Quick reference examples**). These requirements override those in the original question if there is any conflict.
 
 If no answer is clearly supported by the evidence, provide a well-justified educated guess. **Always wrap your final answer in a non-empty \\boxed{{...}}.**
+
+---
+
+# Hard Extraction Rules (mandatory)
+
+{hard_extraction_rules}
 
 ---
 

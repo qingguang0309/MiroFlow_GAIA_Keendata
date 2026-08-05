@@ -60,6 +60,70 @@ def _generate_message_id() -> str:
     return f"msg_{uuid.uuid4().hex[:8]}"
 
 
+# Phase-2 fix P0-1 (fix_plan_phase2.md item 1): a reply with no tool call used
+# to be treated as "task complete" unconditionally. Trace autopsies showed the
+# model sometimes emits only a plan or intermediate reasoning without a tool
+# call, silently ending the task with little or no actual research. When such a
+# reply looks like a premature stop, nudge the agent back to work instead of
+# breaking — at most twice per agent loop.
+MAX_NO_TOOL_CALL_NUDGES = 2
+
+_FINAL_CONCLUSION_MARKER = "FINAL CONCLUSION"
+
+# Phrases announcing future actions; a no-tool-call reply whose tail contains
+# one of these is a plan, not a conclusion (calibrated on subset60 traces).
+_INTENT_MARKERS = (
+    "i'll",
+    "i will",
+    "let me",
+    "next step",
+    "now i",
+    "i am going to",
+    "i'm going to",
+    "proceed to",
+    "接下来",
+    "下一步",
+    "我将",
+    "我会",
+    "让我",
+)
+
+
+def _no_tool_call_nudge_reason(
+    assistant_response_text: Optional[str], executed_tool_call_count: int
+) -> Optional[str]:
+    """Decide whether a no-tool-call reply looks like a premature stop.
+
+    Returns a short reason string when the agent should be nudged to continue,
+    or None when the reply is acceptable as a final conclusion.
+    """
+    text = (assistant_response_text or "").strip()
+    if _FINAL_CONCLUSION_MARKER in text.upper():
+        return None
+    if executed_tool_call_count == 0:
+        return (
+            "no tool call has been executed at any point in this task, "
+            "so the task cannot be complete"
+        )
+    tail = text[-600:].lower()
+    if any(marker in tail for marker in _INTENT_MARKERS):
+        return "the reply announces further actions but performs none"
+    return None
+
+
+def _build_no_tool_call_nudge(reason: str) -> str:
+    return (
+        "This is a system reminder, not a tool result. Your previous reply "
+        f"contained no tool call, so nothing was executed ({reason}). The task "
+        "is NOT finished. Do NOT reply with a plan or announced intentions "
+        "alone. If any investigation step remains, continue now by issuing "
+        "exactly ONE tool call in the <use_mcp_tool> format. If and only if "
+        "the investigation is truly finished, reply with your complete "
+        "findings, beginning with 'FINAL CONCLUSION:', restating the key "
+        "evidence and every candidate answer."
+    )
+
+
 def _load_agent_prompt_class(prompt_class_name: str) -> BaseAgentPrompt:
     # Dynamically import the class from the config.agent_prompts module
     if not isinstance(prompt_class_name, str) or not prompt_class_name.isidentifier():
@@ -433,6 +497,8 @@ class Orchestrator:
         turn_count = 0
         all_tool_results_content_with_id = []
         task_failed = False  # Track whether task failed
+        no_tool_call_nudge_count = 0  # Phase-2 fix P0-1
+        executed_tool_call_count = 0  # Phase-2 fix P0-1
 
         while turn_count < max_turns:
             turn_count += 1
@@ -487,6 +553,32 @@ class Orchestrator:
                 or len(tool_calls) < 2
                 or (len(tool_calls[0]) == 0 and len(tool_calls[1]) == 0)
             ):
+                # Phase-2 fix P0-1: don't silently accept a no-tool-call reply
+                # as the sub agent's conclusion when it looks like a premature stop.
+                nudge_reason = _no_tool_call_nudge_reason(
+                    assistant_response_text, executed_tool_call_count
+                )
+                if nudge_reason and no_tool_call_nudge_count < MAX_NO_TOOL_CALL_NUDGES:
+                    no_tool_call_nudge_count += 1
+                    self.task_log.log_step(
+                        "sub_agent_no_tool_call_nudge",
+                        f"No tool call in sub agent {sub_agent_name} reply "
+                        f"({nudge_reason}); nudging to continue, "
+                        f"{no_tool_call_nudge_count}/{MAX_NO_TOOL_CALL_NUDGES}",
+                        "warning",
+                    )
+                    message_history.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": _build_no_tool_call_nudge(nudge_reason),
+                                }
+                            ],
+                        }
+                    )
+                    continue
                 logger.debug(
                     f"Sub Agent {sub_agent_name} did not request tool use, ending task."
                 )
@@ -509,6 +601,8 @@ class Orchestrator:
                 logger.warning(
                     f"[ERROR] Sub agent single turn tool call count too high ({len(tool_calls[0])} calls), only processing first {max_tool_calls}"
                 )
+
+            executed_tool_call_count += len(tool_calls[0][:max_tool_calls])
 
             for call in tool_calls[0][:max_tool_calls]:
                 # This place can be used to inject arguments of tools
@@ -807,6 +901,8 @@ Your objective is maximum completeness, transparency, and detailed documentation
             max_turns = sys.maxsize
         turn_count = 0
         task_failed = False  # Track whether task failed
+        no_tool_call_nudge_count = 0  # Phase-2 fix P0-1
+        executed_tool_call_count = 0  # Phase-2 fix P0-1
         while turn_count < max_turns:
             turn_count += 1
             logger.debug(f"\n--- Main Agent Turn {turn_count} ---")
@@ -855,6 +951,31 @@ Your objective is maximum completeness, transparency, and detailed documentation
                 or len(tool_calls) < 2
                 or (len(tool_calls[0]) == 0 and len(tool_calls[1]) == 0)
             ):
+                # Phase-2 fix P0-1: don't silently accept a no-tool-call reply
+                # as the final answer when it looks like a premature stop.
+                nudge_reason = _no_tool_call_nudge_reason(
+                    assistant_response_text, executed_tool_call_count
+                )
+                if nudge_reason and no_tool_call_nudge_count < MAX_NO_TOOL_CALL_NUDGES:
+                    no_tool_call_nudge_count += 1
+                    self.task_log.log_step(
+                        "main_agent_no_tool_call_nudge",
+                        f"No tool call in reply ({nudge_reason}); nudging to "
+                        f"continue, {no_tool_call_nudge_count}/{MAX_NO_TOOL_CALL_NUDGES}",
+                        "warning",
+                    )
+                    message_history.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": _build_no_tool_call_nudge(nudge_reason),
+                                }
+                            ],
+                        }
+                    )
+                    continue
                 # No tool calls, consider as final answer
                 logger.debug("LLM did not request tool use, process ends.")
                 break  # Exit loop
@@ -872,6 +993,8 @@ Your objective is maximum completeness, transparency, and detailed documentation
                 logger.warning(
                     f"[ERROR] Single turn tool call count too high ({len(tool_calls[0])} calls), only processing first {max_tool_calls}"
                 )
+
+            executed_tool_call_count += len(tool_calls[0][:max_tool_calls])
 
             for call in tool_calls[0][:max_tool_calls]:
                 server_name = call["server_name"]

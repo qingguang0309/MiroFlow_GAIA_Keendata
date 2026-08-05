@@ -149,6 +149,7 @@ Be cautious and transparent in your output:
 - Always return all related information. If information is incomplete or weakly supported, still share partial excerpts, and flag any uncertainty.
 - Never assume or guess — if an exact answer cannot be found, say so clearly.
 - Prefer quoting or excerpting **original source text** rather than interpreting or rewriting it, and provide the URL if available.
+- **Mandatory**: for every key fact, figure, or term that determines your subtask's answer, include the source's original sentence(s) VERBATIM (quoted, with the critical term or number intact) plus the URL. A paraphrase alone is not acceptable — compressing away the source's exact wording destroys decisive evidence for the requester.
 - If more context is needed, return a clarification request and do not proceed with tool use.
 - Focus on completing the specific subtask assigned to you, not broader reasoning.
 """
@@ -201,6 +202,9 @@ Be cautious and transparent in your output:
                 "Summarize ALL working history for this task, including your step-by-step thoughts, all tool calls, and all tool results (i.e., the full solving trajectory so far).\n"
                 "Output the FINAL ANSWER and detailed supporting information of the task given to you.\n\n"
                 "If you found any useful facts, data, or quotes directly relevant to the original task, include them clearly and completely.\n"
+                # Phase-2 fix P1-5 (fix_plan_phase2.md item 5): one subset60 task was
+                # lost because report compression dropped the source's exact wording.
+                "For every key fact or figure in your report, quote the source's original sentence(s) VERBATIM (with the critical term or number intact, plus the URL) alongside your restatement — never compress away the source's exact wording; it is decisive evidence for the requester.\n"
                 "If you reached a conclusion or answer, include it as part of the response.\n"
                 "If the task could not be fully answered, return all partially relevant findings, search results, quotes, and observations that might help a downstream agent solve the problem.\n"
                 "If partial, conflicting, or inconclusive information was found, clearly indicate this in your response.\n\n"
@@ -355,6 +359,7 @@ Be cautious and transparent in your output:
 - Always return all related information. If information is incomplete or weakly supported, still share partial excerpts, and flag any uncertainty.
 - Never assume or guess — if an exact answer cannot be found, say so clearly.
 - Prefer quoting or excerpting **original source text** rather than interpreting or rewriting it, and provide the URL if available.
+- **Mandatory**: for every key fact, figure, or term that determines your subtask's answer, include the source's original sentence(s) VERBATIM (quoted, with the critical term or number intact) plus the URL. A paraphrase alone is not acceptable — compressing away the source's exact wording destroys decisive evidence for the requester.
 - If more context is needed, return a clarification request and do not proceed with tool use.
 - Focus on completing the specific subtask assigned to you, not broader reasoning.
 """
