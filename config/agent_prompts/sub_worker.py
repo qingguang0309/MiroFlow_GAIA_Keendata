@@ -150,6 +150,7 @@ Be cautious and transparent in your output:
 - Never assume or guess — if an exact answer cannot be found, say so clearly.
 - Prefer quoting or excerpting **original source text** rather than interpreting or rewriting it, and provide the URL if available.
 - **Mandatory**: for every key fact, figure, or term that determines your subtask's answer, include the source's original sentence(s) VERBATIM (quoted, with the critical term or number intact) plus the URL. A paraphrase alone is not acceptable — compressing away the source's exact wording destroys decisive evidence for the requester.
+- **Term anchoring**: when the subtask involves named fields, column headers, or unusual/non-standard terminology, search the source material for each term LITERALLY. If the source defines the term or uses it in a formula, quote that defining sentence or equation VERBATIM and report it — even when it contradicts the standard textbook meaning, and even when it seems tangential. A source-specific definition is decisive evidence; never silently substitute the conventional meaning of a similar-looking term.
 - If more context is needed, return a clarification request and do not proceed with tool use.
 - Focus on completing the specific subtask assigned to you, not broader reasoning.
 """
@@ -205,6 +206,9 @@ Be cautious and transparent in your output:
                 # Phase-2 fix P1-5 (fix_plan_phase2.md item 5): one subset60 task was
                 # lost because report compression dropped the source's exact wording.
                 "For every key fact or figure in your report, quote the source's original sentence(s) VERBATIM (with the critical term or number intact, plus the URL) alongside your restatement — never compress away the source's exact wording; it is decisive evidence for the requester.\n"
+                # Phase-2 batch-2 fix: one task was lost because the sentence defining an
+                # unusual term appeared only in a raw tool result and was never reported.
+                "If any named field, column header, or unusual term appeared in this subtask, report VERBATIM every sentence or equation in the sources that defines or uses that exact term — including ones you judged tangential or contrary to the standard meaning.\n"
                 "If you reached a conclusion or answer, include it as part of the response.\n"
                 "If the task could not be fully answered, return all partially relevant findings, search results, quotes, and observations that might help a downstream agent solve the problem.\n"
                 "If partial, conflicting, or inconclusive information was found, clearly indicate this in your response.\n\n"
@@ -360,6 +364,7 @@ Be cautious and transparent in your output:
 - Never assume or guess — if an exact answer cannot be found, say so clearly.
 - Prefer quoting or excerpting **original source text** rather than interpreting or rewriting it, and provide the URL if available.
 - **Mandatory**: for every key fact, figure, or term that determines your subtask's answer, include the source's original sentence(s) VERBATIM (quoted, with the critical term or number intact) plus the URL. A paraphrase alone is not acceptable — compressing away the source's exact wording destroys decisive evidence for the requester.
+- **Term anchoring**: when the subtask involves named fields, column headers, or unusual/non-standard terminology, search the source material for each term LITERALLY. If the source defines the term or uses it in a formula, quote that defining sentence or equation VERBATIM and report it — even when it contradicts the standard textbook meaning, and even when it seems tangential. A source-specific definition is decisive evidence; never silently substitute the conventional meaning of a similar-looking term.
 - If more context is needed, return a clarification request and do not proceed with tool use.
 - Focus on completing the specific subtask assigned to you, not broader reasoning.
 """

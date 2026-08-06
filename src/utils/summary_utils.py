@@ -66,6 +66,7 @@ Do NOT attempt to guess or infer correct answers, as complete factual informatio
 CRITICAL NEUTRALITY RULES — you are a flagger, not a judge:
 - Never adjudicate between competing interpretations, definitions, formulas, methods, conventions, or data sources. Whenever more than one reading or solution path is plausible, enumerate ALL of them and instruct the solver to work through EACH branch and keep every resulting candidate answer.
 - Never issue negative or exclusionary directives about the solution approach (e.g., "do not assume X", "avoid method Y", "interpretation Z is wrong"). If you suspect a mismatch, phrase it positively: "compute it both under X and under Y and retain both results".
+- Never designate any interpretation as "the natural reading", "the most likely intent", "the standard interpretation", or similar — even as a soft lean. Present every plausible reading as an unranked branch to verify.
 - Your notes must widen the space of candidate answers the solver keeps, never narrow it. These notes are read at every subsequent step of the solving process, so a premature ruling-out here is irreversible and is the single most damaging mistake you can make.
 
 Here is the question:
@@ -451,6 +452,7 @@ The boxed content must be **one** of:
 * Use only standard ASCII quotation marks ("" and ''), **not** stylized or curly quotation marks (such as “ ” ‘ ’).
 * Remove invisible or non-printable characters.
 * If the output is lists, apply the rules item-by-item.
+* If the question asks to transcribe, decode, unscramble, or quote a complete sentence, message, or line, the boxed answer must be that COMPLETE text — do not shorten it, drop words, or reduce it to a fragment (the shortness rules below apply to entity answers, not to requested transcriptions).
 * Avoid unnecessary elaboration - keep the answer as short as possible
     - Do **not** add "count", "number", "count of", "total", or similar quantifying words when the noun itself already refers to the quantity (e.g., use the bare noun form only).
     - No geographical modifiers (e.g., "Western", "Southern"), 
@@ -508,21 +510,67 @@ The boxed content must be **one** of:
     print("Extract Final Answer Prompt:")
     print(full_prompt)
 
+    # Phase-2 batch-2 fix: validate the boxed content for format violations
+    # (LaTeX markup anywhere, unit words in numeric answers) and re-ask once
+    # with an explicit violation notice. GAIA reference answers never contain
+    # LaTeX or units; one lost task had every value correct but boxed
+    # "101.376\ \text{CFM}, ...".
+    effective_type = answer_type if answer_type in ["number", "time"] else "string"
+
+    def _boxed_format_violation(text):
+        m = re.search(r"\\boxed{([^}]*)}", text)
+        if not m:
+            return None
+        boxed = m.group(1)
+        if "\\" in boxed:
+            return (
+                f"the boxed content `{boxed}` contains LaTeX markup (backslash "
+                "commands such as \\text{...} or \\ spacing); the boxed content "
+                "must be the plain answer value with no markup"
+            )
+        if effective_type == "number" and re.search(r"[A-Za-z]{2,}", boxed):
+            return (
+                f"the boxed content `{boxed}` contains letters/unit words, but "
+                "this answer must be number(s) only, with no units"
+            )
+        return None
+
     message_id = _generate_message_id()
-    response = await client.chat.completions.create(
-        model=_final_answer_model(),
-        messages=[{"role": "user", "content": f"[{message_id}] {full_prompt}"}],
-    )
-    result = response.choices[0].message.content
+    messages = [{"role": "user", "content": f"[{message_id}] {full_prompt}"}]
+    result = None
+    for format_attempt in range(2):
+        response = await client.chat.completions.create(
+            model=_final_answer_model(),
+            messages=messages,
+        )
+        result = response.choices[0].message.content
 
-    # Check if result is empty, raise exception to trigger retry if empty
-    if not result or not result.strip():
-        raise ValueError("Final answer extraction returned empty result")
+        # Check if result is empty, raise exception to trigger retry if empty
+        if not result or not result.strip():
+            raise ValueError("Final answer extraction returned empty result")
 
-    # Verify boxed answer exists
-    boxed_match = re.search(r"\\boxed{([^}]*)}", result)
-    if not boxed_match:
-        raise ValueError("Final answer extraction returned empty answer")
+        # Verify boxed answer exists
+        boxed_match = re.search(r"\\boxed{([^}]*)}", result)
+        if not boxed_match:
+            raise ValueError("Final answer extraction returned empty answer")
+
+        violation = _boxed_format_violation(result)
+        if not violation or format_attempt == 1:
+            break
+        print(f"Boxed format violation, re-asking extractor once: {violation}")
+        messages = messages + [
+            {"role": "assistant", "content": result},
+            {
+                "role": "user",
+                "content": (
+                    f"[{_generate_message_id()}] # FORMAT VIOLATION\n\n"
+                    f"Your previous answer violated a hard formatting rule: {violation}. "
+                    "Re-emit your full response in the same output format with the "
+                    "violation corrected. Do not change the substantive answer value — "
+                    "only fix its formatting."
+                ),
+            },
+        ]
 
     print("response:", result)
 

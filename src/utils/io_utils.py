@@ -115,7 +115,39 @@ class OutputFormatter:
                 # If braces are unbalanced, skip this \boxed{ and continue searching
                 i = content_start
 
-        return self._strip_latex_text_wrapper(matches[-1]) if matches else ""
+        if not matches:
+            return ""
+        content = self._strip_latex_text_wrapper(matches[-1])
+        return self._clean_latex_artifacts(content)
+
+    @staticmethod
+    def _clean_latex_artifacts(content: str) -> str:
+        """
+        Remove cosmetic LaTeX markup left INSIDE the boxed answer (beyond the
+        whole-content wrappers handled by _strip_latex_text_wrapper), e.g.
+        "101.376\\ \\text{CFM},\\ 84.348\\ \\text{CFM}". GAIA reference answers
+        never contain LaTeX markup, so these artifacts can only hurt
+        exact-match scoring. Math structure commands (\\frac, \\sqrt, ...) are
+        left untouched.
+        """
+        if "\\" not in content:
+            return content
+        # Interior text-style commands: \text{X} -> X. Innermost-first via the
+        # brace-free payload restriction, repeated until stable.
+        text_cmd = re.compile(
+            r"\\(?:text|textbf|textit|textrm|texttt|mathrm|mathit)\{([^{}]*)\}"
+        )
+        prev = None
+        while prev != content:
+            prev = content
+            content = text_cmd.sub(r"\1", content)
+        # LaTeX spacing macros -> regular space.
+        content = re.sub(r"\\[ ,;:!]|\\qquad|\\quad", " ", content)
+        # Escaped literal characters -> the characters themselves.
+        content = re.sub(r"\\([%$&#_])", r"\1", content)
+        # Collapse whitespace introduced by the replacements.
+        content = re.sub(r"[ \t]+", " ", content).strip()
+        return content
 
     @staticmethod
     def _strip_latex_text_wrapper(content: str) -> str:

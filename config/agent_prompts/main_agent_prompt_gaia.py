@@ -116,6 +116,9 @@ You accomplish a given task iteratively, breaking it down into clear steps and w
 1. Do not lock in one interpretation of the question before the underlying data is in hand. Formulate subtasks neutrally: describe what to fetch or observe, not which reading of the question to confirm — never bake an unverified assumption or a pre-chosen interpretation into the subtask wording.
 2. When the answer hinges on the exact wording of a source, require the verbatim source sentence(s) containing the key term or figure. If a subtask report states a conclusion without the verbatim quote, treat that point as unverified and request the exact quote before relying on it.
 3. Keep every plausible candidate answer alive until the final summary; eliminate a candidate only with explicit evidence against it, and record that evidence.
+4. When a question's selection criterion combines negation with "or"/"and" (e.g., "not X or Y"), treat the boolean structure itself as ambiguous: compute the count under the inclusive-OR reading, the joint AND-style filter reading, and the neither-nor reading, and carry ALL of them into the final summary as parallel candidates.
+5. For anagram/letter-rearrangement questions, a candidate source text is valid ONLY if its letters exactly match the puzzle text (same letters, same counts — verify by counting, e.g. with a code tool); reject any candidate that fails this check, including shortened or partial lines.
+6. When an attached file's field names, column headers, or the question's terminology are unusual or non-standard, require a subtask to search the cited source material for those exact terms and report the defining sentence or formula verbatim. A definition given by the question's own source overrides the standard textbook meaning of a similar-looking term — never plug the field into a conventional formula without first checking how the source itself defines it.
 
 """
 
@@ -182,7 +185,20 @@ You accomplish a given task iteratively, breaking it down into clear steps and w
                 "- Prefer the value as printed on the page/label/table (face value) over unit-converted or "
                 "re-derived equivalents.\n"
                 "- Prefer the result of a single direct lookup in a consumer tool (e.g., Google Maps driving "
-                "distance/time, a published word count) over a multi-step technical reconstruction.\n\n"
+                "distance/time, a published word count) over a multi-step technical reconstruction.\n"
+                # Phase-2 batch-2 additions (see runs/p0p1_retest_notes.md):
+                "- When several same-year or same-date items tie for \"first/earliest/oldest\", break the tie "
+                "by objective print order (proceedings page numbers, DOI/issue sequence) — never by webpage "
+                "display order; citation suffixes like 2001a/2001b are alphabetical labels, not chronology.\n"
+                "- When a selection criterion combines negation with \"or\"/\"and\" (e.g., \"not X or Y\"), "
+                "annotators typically implement it as a single spreadsheet filter applying the conditions "
+                "jointly (COUNTIFS-style AND) even though the sentence says \"or\"; if you computed several "
+                "boolean readings, prefer the joint-filter (AND-style) count.\n"
+                "- When a consumer data panel (Nutrition Facts, spec sheet) shows both per-serving/per-unit "
+                "values and per-container/total aggregates, compute ratios and percentages from the "
+                "finest-granularity per-unit row; aggregate columns are independently rounded derived values — "
+                "use them only as a sanity check. Wording like \"the whole pint/package\" defines the object, "
+                "not which row to read.\n\n"
                 "Summarize ALL working history for this task, including your step-by-step thoughts, all tool calls, and all tool results (i.e., the full solving trajectory so far).\n"
                 "Output the FINAL ANSWER and detailed supporting information of the task given to you.\n\n"
                 "If you found any useful facts, data, or quotes directly relevant to the original task, include them clearly and completely.\n"

@@ -68,6 +68,12 @@ def _generate_message_id() -> str:
 # breaking — at most twice per agent loop.
 MAX_NO_TOOL_CALL_NUDGES = 2
 
+# Phase-2 batch-2 fix: guard against "summary collapse" — the model
+# occasionally answers a full summarize prompt with a bare number (observed: a
+# 3-char summary "193"), starving the final-answer extraction of all evidence.
+# Summaries shorter than this are re-asked once before being accepted.
+MIN_ACCEPTABLE_SUMMARY_CHARS = 200
+
 _FINAL_CONCLUSION_MARKER = "FINAL CONCLUSION"
 
 # Phrases announcing future actions; a no-tool-call reply whose tail contains
@@ -354,6 +360,7 @@ class Orchestrator:
         3. Until only initial system-user messages remain
         """
         retry_count = 0
+        collapse_retry_done = False  # Phase-2 batch-2 fix
 
         while True:
             # Generate summary prompt
@@ -403,6 +410,57 @@ class Orchestrator:
                     await asyncio.sleep(60)
 
             if response_text:
+                # Phase-2 batch-2 fix: degenerate (collapsed) summary -> re-ask once.
+                if (
+                    len(response_text.strip()) < MIN_ACCEPTABLE_SUMMARY_CHARS
+                    and not collapse_retry_done
+                ):
+                    collapse_retry_done = True
+                    self.task_log.log_step(
+                        f"{agent_type}_summary_collapse_retry",
+                        f"Summary suspiciously short ({len(response_text.strip())} "
+                        "chars); re-asking once for the full report",
+                        "warning",
+                    )
+                    message_history.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        "Your previous reply is not an acceptable summary — it is only "
+                                        f"{len(response_text.strip())} characters long. You MUST produce "
+                                        "the full structured report requested above: all findings and "
+                                        "evidence gathered during the session, every candidate answer "
+                                        "with its support, and the FINAL ANSWER. Reply with the complete "
+                                        "report now."
+                                    ),
+                                }
+                            ],
+                        }
+                    )
+                    retry_text = None
+                    for network_retry_count in range(5):
+                        (
+                            retry_text,
+                            _,
+                            retry_info,
+                        ) = await self._handle_llm_call_with_logging(
+                            system_prompt,
+                            message_history,
+                            tool_definitions,
+                            999,
+                            purpose,
+                            agent_type=agent_type,
+                        )
+                        if retry_text or retry_info == "context_limit":
+                            break
+                        await asyncio.sleep(60)
+                    if retry_text and len(retry_text.strip()) > len(
+                        response_text.strip()
+                    ):
+                        return retry_text
                 # Call successful: return generated summary text
                 return response_text
 
