@@ -533,6 +533,19 @@ The boxed content must be **one** of:
                 f"the boxed content `{boxed}` contains letters/unit words, but "
                 "this answer must be number(s) only, with no units"
             )
+        # Multi-value numeric answers are typed "string"; catch trailing unit
+        # words there too (observed: "102.43 CFM, 87.78 CFM"). Only fires when
+        # EVERY comma-separated item is a number followed by a unit word, so
+        # genuine text answers are unaffected.
+        items = [p.strip() for p in boxed.split(",") if p.strip()]
+        if len(items) >= 2 and all(
+            re.fullmatch(r"[+-]?[\d.]+\s*[A-Za-z][A-Za-z/^\d]*", it) for it in items
+        ):
+            return (
+                f"every item in the boxed content `{boxed}` is a number followed "
+                "by a unit word; the boxed answer must list the bare numbers "
+                "only, without units"
+            )
         return None
 
     message_id = _generate_message_id()
