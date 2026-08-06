@@ -67,6 +67,11 @@ CRITICAL NEUTRALITY RULES — you are a flagger, not a judge:
 - Never adjudicate between competing interpretations, definitions, formulas, methods, conventions, or data sources. Whenever more than one reading or solution path is plausible, enumerate ALL of them and instruct the solver to work through EACH branch and keep every resulting candidate answer.
 - Never issue negative or exclusionary directives about the solution approach (e.g., "do not assume X", "avoid method Y", "interpretation Z is wrong"). If you suspect a mismatch, phrase it positively: "compute it both under X and under Y and retain both results".
 - Never designate any interpretation as "the natural reading", "the most likely intent", "the standard interpretation", or similar — even as a soft lean. Present every plausible reading as an unranked branch to verify.
+
+EXCEPTIONS — the neutrality rules above govern WHICH ANSWER is right; they do NOT stop you from being directive about method and output form. You SHOULD state these plainly, including in negative form:
+- **Technical/parsing cautions**: how to decode, segment, or parse the given material (e.g. "do not treat every character as a separate positional digit", "watch for the thousands separator", "the file's date column is text, not a date"). These constrain method, not the answer.
+- **Output form**: how many items the answer should contain, which single item is being asked for when a source presents a pair or mapping, the unit, the tense/word form. If the question asks for one word and the material presents a substitution "X → Y", say explicitly which of the two is being requested.
+- **Source-quality cautions**: which kinds of sources are authoritative for this question and which are mirrors/derivatives whose formatting cannot be trusted.
 - Your notes must widen the space of candidate answers the solver keeps, never narrow it. These notes are read at every subsequent step of the solving process, so a premature ruling-out here is irreversible and is the single most damaging mistake you can make.
 
 Here is the question:
@@ -262,7 +267,8 @@ Rate conservatively - if unsure between two ranges, choose the lower one.
 * **No extra transformations**: never apply a transformation the question does not explicitly require — no reversing or re-encoding, no unit re-derivation, no spelling "fixes", no undoing or redoing a conversion the summary already performed. If the summary's final answer already directly answers the question as asked, transcribe it as-is.
 * **Counting questions**: if the question asks "how many ..." or otherwise requests a count, the boxed content MUST be a single number (e.g. 6) — never a list, a breakdown, or a sentence.
 * **Total over breakdown**: if the summary contains both a per-category breakdown and an overall total for the asked quantity, use the overall total, not the breakdown.
-* **Override only from within the summary**: you may deviate from the summary's final answer ONLY when the summary's own evidence explicitly contradicts it, and the replacement must itself be stated verbatim in the summary. Formatting fixes per the rules below do not count as deviations."""
+* **Override only from within the summary**: you may deviate from the summary's final answer ONLY when the summary's own evidence explicitly contradicts it, and the replacement must itself be stated verbatim in the summary. Formatting fixes per the rules below do not count as deviations.
+* **Selecting is not rewriting**: picking the single item the question asks for out of a pair, list, or mapping that the summary states — and dropping the rest — is required, not a violation of the verbatim rule."""
 
     full_prompts = {
         "time": f"""# Inputs
@@ -275,6 +281,7 @@ Rate conservatively - if unsure between two ranges, choose the lower one.
 # Task
 
 1. **Locate the answer in the Agent Summary**: read the summary carefully; take the summary's "Final Answer" as the primary candidate, check it against the evidence the summary itself presents, and note any alternative candidate answers the summary explicitly mentions.
+1b. **Consistency check (mandatory)**: verify the summary's stated final answer against the summary's OWN tables, figures, computations, and measurements. If the summary's own data contradicts its stated final answer (e.g. its coordinate table shows a different extreme, its arithmetic yields a different total), follow the data — the value it supports must itself appear in the summary. Also check the answer's SHAPE against the question: when the question asks for one item but the summary states a pair or mapping ("X → Y"), select the item the question actually asks for; selecting from what the summary states is not rewriting.
 2. **Choose among the candidates stated in the summary** (ignoring formatting and phrasing requirements at this stage).
 – Keep the summary's final answer unless the summary's own evidence clearly contradicts it and better supports another candidate stated in the summary.
 – If several candidates are comparably supported, prefer the one reflecting the most common, straightforward reading of the question — the answer an ordinary person using everyday consumer tools (web browser, Google Maps, spreadsheet filters) would reach — over the most technical or rigorous reading.
@@ -337,6 +344,7 @@ The boxed content must be a time.
 # Task
 
 1. **Locate the answer in the Agent Summary**: read the summary carefully; take the summary's "Final Answer" as the primary candidate, check it against the evidence the summary itself presents, and note any alternative candidate answers the summary explicitly mentions.
+1b. **Consistency check (mandatory)**: verify the summary's stated final answer against the summary's OWN tables, figures, computations, and measurements. If the summary's own data contradicts its stated final answer (e.g. its coordinate table shows a different extreme, its arithmetic yields a different total), follow the data — the value it supports must itself appear in the summary. Also check the answer's SHAPE against the question: when the question asks for one item but the summary states a pair or mapping ("X → Y"), select the item the question actually asks for; selecting from what the summary states is not rewriting.
 2. **Choose among the candidates stated in the summary** (ignoring formatting and phrasing requirements at this stage).
 – Keep the summary's final answer unless the summary's own evidence clearly contradicts it and better supports another candidate stated in the summary.
 – If several candidates are comparably supported, prefer the one reflecting the most common, straightforward reading of the question — the answer an ordinary person using everyday consumer tools (web browser, Google Maps, spreadsheet filters) would reach — over the most technical or rigorous reading.
@@ -419,6 +427,7 @@ The boxed content must be a single number.
 # Task
 
 1. **Locate the answer in the Agent Summary**: read the summary carefully; take the summary's "Final Answer" as the primary candidate, check it against the evidence the summary itself presents, and note any alternative candidate answers the summary explicitly mentions.
+1b. **Consistency check (mandatory)**: verify the summary's stated final answer against the summary's OWN tables, figures, computations, and measurements. If the summary's own data contradicts its stated final answer (e.g. its coordinate table shows a different extreme, its arithmetic yields a different total), follow the data — the value it supports must itself appear in the summary. Also check the answer's SHAPE against the question: when the question asks for one item but the summary states a pair or mapping ("X → Y"), select the item the question actually asks for; selecting from what the summary states is not rewriting.
 2. **Choose among the candidates stated in the summary** (ignoring formatting and phrasing requirements at this stage).
 – Keep the summary's final answer unless the summary's own evidence clearly contradicts it and better supports another candidate stated in the summary.
 – If several candidates are comparably supported, prefer the one reflecting the most common, straightforward reading of the question — the answer an ordinary person using everyday consumer tools (web browser, Google Maps, spreadsheet filters) would reach — over the most technical or rigorous reading.

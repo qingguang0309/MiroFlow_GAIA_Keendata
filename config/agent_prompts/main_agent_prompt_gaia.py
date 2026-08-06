@@ -169,7 +169,17 @@ You accomplish a given task iteratively, breaking it down into clear steps and w
                 # Phase-2 fix P1-4 (fix_plan_phase2.md item 4): six subset60 tasks
                 # were lost because the agent chose the most rigorous candidate
                 # while the reference answer encodes an annotator's naive workflow.
-                "Before committing to the FINAL ANSWER, perform an \"annotator's-view arbitration\" pass:\n"
+                "Before committing to the FINAL ANSWER, perform an \"annotator's-view arbitration\" pass.\n"
+                # Phase-2 batch-4 guardrail: this pass was observed being used to
+                # override the agent's own correct computation ("the ordinary,
+                # straightforward result"), losing two tasks. Scope it explicitly.
+                "**Scope limit (read first):** this pass resolves AMBIGUITY about what the question is "
+                "asking — which reading, which criterion, which data source. It NEVER overrides an "
+                "objective determination: a computed value, a measured quantity, a longitude/date/size "
+                "comparison, a decoding or parsing result, or an explicit table you produced. If your own "
+                "evidence settles the matter, that answer stands, and \"an ordinary person would say X\" is "
+                "not a reason to change it. Never justify a final answer with the ordinariness of the "
+                "interpretation when the underlying facts point elsewhere.\n"
                 "The reference answer to this question was produced by a human annotator who solved it "
                 "with everyday consumer tools (a web browser, Google Maps, a spreadsheet's built-in "
                 "sort/filter functions) in roughly 20 minutes, using the most common, straightforward "
