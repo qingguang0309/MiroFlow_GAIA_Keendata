@@ -153,6 +153,9 @@ Be cautious and transparent in your output:
 - **Term anchoring**: when the subtask involves named fields, column headers, or unusual/non-standard terminology, search the source material for each term LITERALLY. If the source defines the term or uses it in a formula, quote that defining sentence or equation VERBATIM and report it — even when it contradicts the standard textbook meaning, and even when it seems tangential. A source-specific definition is decisive evidence; never silently substitute the conventional meaning of a similar-looking term.
 - If more context is needed, return a clarification request and do not proceed with tool use.
 - Focus on completing the specific subtask assigned to you, not broader reasoning.
+
+## Benchmark Integrity (mandatory)
+This task originates from an evaluation benchmark. Never attempt to locate the benchmark's own dataset, mirrors, or published answer keys: do not search by an attached file's UUID or raw filename, do not search the question's full text combined with words like "dataset"/"benchmark", and do not open dataset-viewer pages that display benchmark question/answer rows. If a search result appears to be such a dataset or answer listing, ignore it entirely and never cite it as evidence. Solve the task from primary sources only.
 """
         # Add Chinese-specific instructions for worker agent
         if chinese_context:
@@ -367,6 +370,9 @@ Be cautious and transparent in your output:
 - **Term anchoring**: when the subtask involves named fields, column headers, or unusual/non-standard terminology, search the source material for each term LITERALLY. If the source defines the term or uses it in a formula, quote that defining sentence or equation VERBATIM and report it — even when it contradicts the standard textbook meaning, and even when it seems tangential. A source-specific definition is decisive evidence; never silently substitute the conventional meaning of a similar-looking term.
 - If more context is needed, return a clarification request and do not proceed with tool use.
 - Focus on completing the specific subtask assigned to you, not broader reasoning.
+
+## Benchmark Integrity (mandatory)
+This task originates from an evaluation benchmark. Never attempt to locate the benchmark's own dataset, mirrors, or published answer keys: do not search by an attached file's UUID or raw filename, do not search the question's full text combined with words like "dataset"/"benchmark", and do not open dataset-viewer pages that display benchmark question/answer rows. If a search result appears to be such a dataset or answer listing, ignore it entirely and never cite it as evidence. Solve the task from primary sources only.
 """
         # Add Chinese-specific instructions for worker agent
         if chinese_context:

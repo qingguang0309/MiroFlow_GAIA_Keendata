@@ -4,6 +4,7 @@
 
 import sys
 import os
+import re
 import json
 import requests
 import datetime
@@ -36,6 +37,80 @@ REMOVE_ANSWER_BOX = os.environ.get("REMOVE_ANSWER_BOX", "").lower() in (
     "1",
     "yes",
 )
+
+# GAIA benchmark leakage guard (fix_plan_phase2.md item 9): agents were
+# observed locating HF mirrors of the gaia-benchmark dataset via search — the
+# validation split includes reference answers — both by fetching mirror pages
+# and passively via dataset-viewer snippets surfaced inside search results.
+# Filter such results out of every search response and refuse to fetch
+# matching URLs. On by default; disable only via env (other benchmarks are
+# unaffected by these patterns).
+GAIA_LEAKAGE_FILTER_DISABLED = os.environ.get(
+    "DISABLE_GAIA_LEAKAGE_FILTER", ""
+).lower() in ("true", "1", "yes")
+
+_GAIA_LEAKAGE_URL_PATTERNS = (
+    # HF datasets AND spaces paths mentioning gaia: covers gaia-benchmark/GAIA
+    # itself, third-party mirrors/subsets (.../SearchGym-test-data/blob/main/
+    # GAIA/, .../MAPS/viewer/GAIA-v2-LILT, lauspectrum/gaia-validation-sampled),
+    # and spaces hosting gaia_validation.jsonl / evaluation-responses files.
+    re.compile(r"huggingface\.co/(?:datasets|spaces)/[^\s\"']*gaia", re.I),
+    # HF datasets-server API (parquet/rows endpoints take the dataset as a
+    # query param) and HF mirrors.
+    re.compile(r"datasets-server\.huggingface\.co[^\s\"']*gaia", re.I),
+    re.compile(r"hf-mirror\.com[^\s\"']*gaia", re.I),
+    # The dataset org name / generic phrase, any host.
+    re.compile(r"gaia[-_]benchmark", re.I),
+    # Benchmark data/answer files hosted anywhere (observed on github &
+    # raw.githubusercontent: GAIA_web.jsonl, gaia_validation_results_*.jsonl).
+    re.compile(
+        r"gaia[\w.-]*(?:_web|validation|_test\b|_eval\w*|_responses|_results)"
+        r"[\w.-]*\.(?:jsonl?|parquet|csv)",
+        re.I,
+    ),
+    re.compile(
+        r"(?:github|githubusercontent|gitee)\.com[^\s\"']*gaia[^\s\"']*\.(?:jsonl?|parquet)",
+        re.I,
+    ),
+    # HF API endpoints (dataset search, resolve-cache for spaces/datasets):
+    # agents were observed querying api/datasets?search=GAIA to enumerate
+    # mirrors directly.
+    re.compile(r"huggingface\.co/api/[^\s\"']*gaia", re.I),
+    # Sites that render benchmark tasks / leaderboards / community answers.
+    re.compile(
+        r"(?:leaderboard\.neurometric\.ai|benchscope\.ai|hal\.cs\.princeton\.edu)"
+        r"[^\s\"']*gaia",
+        re.I,
+    ),
+    re.compile(r"gaia\.coralprotocol\.org", re.I),
+    re.compile(r"/gaia/task/[0-9a-f]{8}-", re.I),
+    re.compile(r"/benchmarks?/gaia", re.I),
+    re.compile(r"gaia[-_ ]?leaderboard", re.I),
+)
+
+# Title/snippet phrase check. ESA's Gaia space observatory is unaffected:
+# astronomy pages say "Gaia mission/archive/DR3", never "GAIA benchmark",
+# and never live under HF dataset paths.
+_GAIA_LEAKAGE_TEXT_PATTERN = re.compile(r"gaia[\s\-_]?benchmark", re.I)
+
+
+def _is_gaia_leakage_url(url: str) -> bool:
+    if not url or GAIA_LEAKAGE_FILTER_DISABLED:
+        return False
+    return any(p.search(url) for p in _GAIA_LEAKAGE_URL_PATTERNS)
+
+
+def _is_gaia_leakage_result(item: dict) -> bool:
+    """True if a search-result entry points at (or excerpts) a GAIA benchmark
+    dataset mirror or a page presenting benchmark Q/A content."""
+    if GAIA_LEAKAGE_FILTER_DISABLED:
+        return False
+    url = item.get("link") or item.get("url") or ""
+    if _is_gaia_leakage_url(url):
+        return True
+    text = f"{item.get('title', '')} {item.get('snippet', '')}"
+    return bool(_GAIA_LEAKAGE_TEXT_PATTERN.search(text))
+
 
 # Initialize FastMCP server
 setup_mcp_logging(tool_name=os.path.basename(__file__))
@@ -76,6 +151,16 @@ def filter_google_search_result(result_content: str) -> str:
                 for item in data["peopleAlsoAsk"]:
                     if "snippet" in item:
                         del item["snippet"]
+
+        # GAIA leakage guard: silently drop results that point at (or excerpt)
+        # GAIA benchmark dataset mirrors — no hint is left for the agent.
+        for key in ("organic", "peopleAlsoAsk", "topStories", "news"):
+            if key in data and isinstance(data[key], list):
+                data[key] = [
+                    item
+                    for item in data[key]
+                    if not (isinstance(item, dict) and _is_gaia_leakage_result(item))
+                ]
 
         # Return filtered JSON
         return json.dumps(data, ensure_ascii=False, indent=2)
@@ -463,6 +548,10 @@ async def search_archived_webpage(url: str, year: int, month: int, day: int) -> 
     if not url:
         return f"[ERROR]: Invalid URL: '{url}'. URL cannot be empty."
 
+    # GAIA leakage guard: refuse to look up benchmark dataset mirrors.
+    if _is_gaia_leakage_url(url):
+        return f"[ERROR]: No archived versions found for '{url}'."
+
     # Auto-add https:// if no protocol is specified
     protocol_hint = ""
     if not url.startswith(("http://", "https://")):
@@ -686,6 +775,10 @@ async def scrape_website(url: str) -> str:
     Returns:
         The scraped website content.
     """
+    # GAIA leakage guard: refuse to fetch benchmark dataset mirrors. The error
+    # mimics an ordinary fetch failure so the agent simply moves on.
+    if _is_gaia_leakage_url(url):
+        return "[ERROR]: Failed to fetch this URL."
     # TODO: Long Content Handling
     return await smart_request(
         url,
