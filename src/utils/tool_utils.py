@@ -16,6 +16,33 @@ import os
 LOGGER_LEVEL = os.getenv("LOGGER_LEVEL", "INFO")
 logger = bootstrap_logger(level=LOGGER_LEVEL)
 
+# Proxy env vars to propagate into MCP server subprocesses. The MCP SDK starts
+# stdio servers with only a small safe-env allowlist (HOME/PATH/USER/...), and
+# each tool yaml declares only its API keys — so HTTP(S)_PROXY/NO_PROXY set in
+# the parent (e.g. loaded from .env) would NOT reach the subprocess. Tools that
+# fetch blocked domains (archived pages, Gemini, github raw) issue those
+# requests from inside their own process via requests/httpx, which read these
+# vars. On macOS the parent has none of these set (system proxy is used
+# instead), so this injection is a no-op there and local behavior is unchanged;
+# on a headless Linux box behind an ssh tunnel, it is what makes the tunnel
+# actually apply.
+_PROXY_ENV_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+)
+
+
+def _with_proxy_env(env: dict) -> dict:
+    merged = dict(env)
+    for key in _PROXY_ENV_KEYS:
+        if key in os.environ and key not in merged:
+            merged[key] = os.environ[key]
+    return merged
+
 
 # MCP server configuration generation function
 def create_mcp_server_parameters(
@@ -42,7 +69,7 @@ def create_mcp_server_parameters(
                             if tool_cfg["tool_command"] == "python"
                             else tool_cfg["tool_command"],
                             args=tool_cfg.get("args", []),
-                            env=tool_cfg.get("env", {}),
+                            env=_with_proxy_env(tool_cfg.get("env", {})),
                         ),
                     }
                 )
