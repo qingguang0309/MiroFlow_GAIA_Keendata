@@ -48,9 +48,13 @@ class GPT5OpenAIClient(LLMProviderClientBase):
                 timeout=1800,
             )
 
+    # Transport robustness (8/17): the keendata router's upstream for gpt-5.6-sol showed 1-5 min bursts of
+    # 401/429/5xx. 5 attempts x (5,10,20,40 s) exhausted inside a burst and turned agent turns into errors;
+    # 8 attempts with waits capped at 60 s (5,10,20,40,60,60,60 = ~4.3 min) ride out such bursts. Successful
+    # calls are unaffected, so agent behaviour is unchanged when the router is healthy.
     @retry(
-        wait=wait_exponential(multiplier=5),
-        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=5, max=60),
+        stop=stop_after_attempt(8),
         retry=retry_if_not_exception_type(ContextLimitError),
     )
     async def _create_message(
