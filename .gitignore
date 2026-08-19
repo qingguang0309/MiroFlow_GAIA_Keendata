@@ -216,3 +216,6 @@ data/*
 
 debug.py
 **/debug.py
+# local secret backups (never commit)
+.env.*.bak
+.env*.bak
