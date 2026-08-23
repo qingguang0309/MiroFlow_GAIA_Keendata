@@ -207,6 +207,37 @@ class OutputFormatter:
         # return [{"type": "text", "text": content}]
         return {"type": "text", "text": content}
 
+
+    @staticmethod
+    def _extract_final_conclusion_line(text: str) -> str:
+        """Verbatim grab of the FINAL CONCLUSION content (same-line remainder, or the
+        next non-empty line). Markdown emphasis/heading glyphs are stripped; anything
+        longer than 400 chars is treated as not-an-answer. Returns "" when absent."""
+        import re as _re
+
+        m = _re.search(r"FINAL CONCLUSION\s*:?\s*(.*)", text)
+        if not m:
+            return ""
+        candidate = m.group(1).strip()
+        if not candidate:
+            for line in text[m.end():].splitlines():
+                if line.strip():
+                    candidate = line.strip()
+                    break
+        candidate = candidate.strip().strip("`").strip()
+        candidate = _re.sub(r"^[#*\s]+|[#*\s]+$", "", candidate)
+        candidate = _re.sub(r"\*\*(.+?)\*\*", r"\1", candidate)
+        meta = _re.match(
+            r"^(.*?)[ \t]*\((?:[^)]*\b(?:candidate|primary|likely|approx\w*|confidence|tentative|guess|uncertain\w*)\b[^)]*)\)$",
+            candidate,
+            _re.IGNORECASE,
+        )
+        if meta and meta.group(1).strip():
+            candidate = meta.group(1).strip()
+        if not candidate or len(candidate) > 400:
+            return ""
+        return candidate
+
     def format_final_summary_and_log(self, final_answer_text, client=None):
         """Format final summary information, including answer and token statistics"""
         summary_lines = []
@@ -218,6 +249,12 @@ class OutputFormatter:
 
         # Add extracted result section
         summary_lines.append("\n" + "-" * 20 + " Extracted Result " + "-" * 20)
+
+        if not boxed_result and final_answer_text:
+            # Fallback: when the boxed-rewrite step is unavailable (e.g. the extraction
+            # LLM is down) and the summary itself skipped \boxed{}, take the model's own
+            # FINAL CONCLUSION line verbatim instead of scoring an automatic zero.
+            boxed_result = self._extract_final_conclusion_line(final_answer_text)
 
         if boxed_result:
             summary_lines.append(boxed_result)
