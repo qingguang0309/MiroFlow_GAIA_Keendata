@@ -8,9 +8,17 @@ from typing import Any, Dict, List
 
 from omegaconf import DictConfig
 from openai import AsyncOpenAI, OpenAI
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import (
+    retry,
+    retry_if_not_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from src.llm.provider_client_base import LLMProviderClientBase
+# The orchestrator catches this exact class (src/core/orchestrator.py imports it from
+# claude_openrouter_client), so context-limit signals must raise this one, not a local copy.
+from src.llm.providers.claude_openrouter_client import ContextLimitError
 
 from src.logging.logger import bootstrap_logger
 
@@ -42,7 +50,12 @@ class GPTOpenAIClient(LLMProviderClientBase):
                 timeout=1800,
             )
 
-    @retry(wait=wait_fixed(10), stop=stop_after_attempt(5))
+    # Same burst tolerance as the GPT5 client (patch #10): ride out 1-5 min upstream bursts.
+    @retry(
+        wait=wait_exponential(multiplier=5, max=60),
+        stop=stop_after_attempt(8),
+        retry=retry_if_not_exception_type(ContextLimitError),
+    )
     async def _create_message(
         self,
         system_prompt: str,
@@ -138,8 +151,26 @@ class GPTOpenAIClient(LLMProviderClientBase):
         except asyncio.CancelledError:
             logger.exception("[WARNING] LLM API call was cancelled during execution")
             raise
+        except ContextLimitError:
+            raise
         except Exception as e:
-            logger.exception(f"OpenAI LLM call failed: {str(e)}")
+            # Moonshot/Kimi signals context overflow with HTTP 400 and a length-related
+            # message; convert to ContextLimitError so the history-trimming ladder runs
+            # instead of blind retries.
+            error_str = str(e)
+            if any(
+                kw in error_str.lower()
+                for kw in (
+                    "exceeded model token limit",
+                    "context length",
+                    "maximum context",
+                    "context window",
+                    "tokens exceed",
+                    "input length and `max_tokens` exceed",
+                )
+            ):
+                raise ContextLimitError(f"Context limit exceeded: {error_str}")
+            logger.exception(f"OpenAI LLM call failed: {error_str}")
             raise e
 
     async def _create_completion(self, params: Dict[str, Any], is_async: bool):
