@@ -7,6 +7,14 @@ import re
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 import uuid
+import asyncio
+
+# Aux-role LLM calls (hints / answer-type / final-answer extraction) all ride the shared
+# router, whose sol upstream sustains only ~4-8 concurrent heavy requests (measured 8/17).
+# A benchmark launch fires max_concurrent tasks at once, i.e. 2x that many aux calls in one
+# burst — enough to 429-choke the upstream on its own. This semaphore caps aux-side
+# pressure independently of task concurrency (env-tunable).
+_AUX_LLM_SEMAPHORE = asyncio.Semaphore(int(os.environ.get("AUX_LLM_CONCURRENCY", "3")))
 
 # Model names for auxiliary LLM calls (hint generation / answer-type detection /
 # final answer extraction). Overridable via env so non-OpenAI-official routers
@@ -102,7 +110,8 @@ Here is the question:
         message_id = _generate_message_id()
         content = f"[{message_id}] {content}"
 
-    response = await client.chat.completions.create(
+    async with _AUX_LLM_SEMAPHORE:
+        response = await client.chat.completions.create(
         model=_hint_model(),
         messages=[{"role": "user", "content": content}],
         reasoning_effort="high",
@@ -145,7 +154,8 @@ Return exactly one of the [number, date, time, string], nothing else.
     print(f"Answer type instruction: {instruction}")
 
     message_id = _generate_message_id()
-    response = await client.chat.completions.create(
+    async with _AUX_LLM_SEMAPHORE:
+        response = await client.chat.completions.create(
         model=_answer_type_model(),
         messages=[{"role": "user", "content": f"[{message_id}] {instruction}"}],
     )
@@ -561,10 +571,11 @@ The boxed content must be **one** of:
     messages = [{"role": "user", "content": f"[{message_id}] {full_prompt}"}]
     result = None
     for format_attempt in range(2):
-        response = await client.chat.completions.create(
-            model=_final_answer_model(),
-            messages=messages,
-        )
+        async with _AUX_LLM_SEMAPHORE:
+            response = await client.chat.completions.create(
+                model=_final_answer_model(),
+                messages=messages,
+            )
         result = response.choices[0].message.content
 
         # Check if result is empty, raise exception to trigger retry if empty
@@ -727,7 +738,8 @@ async def extract_browsecomp_zh_final_answer(
     print(full_prompt)
 
     message_id = _generate_message_id()
-    response = await client.chat.completions.create(
+    async with _AUX_LLM_SEMAPHORE:
+        response = await client.chat.completions.create(
         model=_final_answer_model(),
         messages=[{"role": "user", "content": f"[{message_id}] {full_prompt}"}],
         reasoning_effort="medium",
