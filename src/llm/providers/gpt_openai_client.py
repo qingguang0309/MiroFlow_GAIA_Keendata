@@ -137,6 +137,17 @@ class GPTOpenAIClient(LLMProviderClientBase):
             if self.top_k != -1:
                 params["top_k"] = self.top_k
 
+            # Kimi-k3 ignores the tool-use mandate on ~1/3 of tasks (answers 3 turns
+            # in a row with zero tool calls despite nudges). When enabled, force the
+            # FIRST turn of each session (no assistant message in history yet) to call
+            # a tool; later turns stay "auto" so the loop can still terminate.
+            if (
+                os.environ.get("FORCE_FIRST_TOOL_CALL") == "1"
+                and tool_list
+                and not any(m.get("role") == "assistant" for m in messages_copy)
+            ):
+                params["tool_choice"] = "required"
+
             if self.oai_tool_thinking:
                 response = await self._handle_oai_tool_thinking(
                     params, messages, self.async_client

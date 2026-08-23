@@ -215,7 +215,7 @@ class OutputFormatter:
         longer than 400 chars is treated as not-an-answer. Returns "" when absent."""
         import re as _re
 
-        m = _re.search(r"FINAL CONCLUSION\s*:?\s*(.*)", text)
+        m = _re.search(r"FINAL (?:CONCLUSION|ANSWER)\s*:?\s*(.*)", text, _re.IGNORECASE)
         if not m:
             return ""
         candidate = m.group(1).strip()
