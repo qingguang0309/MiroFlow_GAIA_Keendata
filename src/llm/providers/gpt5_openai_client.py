@@ -139,7 +139,7 @@ class GPT5OpenAIClient(LLMProviderClientBase):
 
             # Accept gpt-5 family variants (e.g. gpt-5.6 on internal routers), not
             # just the two official OpenAI ids the upstream whitelist allowed.
-            assert self.model_name.startswith("gpt-5"), (
+            assert self.model_name.startswith(("gpt-5", "openai/gpt-5")), (
                 f"GPT5OpenAIClient expects a gpt-5 family model, got {self.model_name!r}"
             )
             params = {

@@ -36,7 +36,7 @@ main_agent:
     final_answer_extraction: true
     final_answer_llm_base_url: "${oc.env:FINAL_ANSWER_LLM_BASE_URL,https://api.openai.com/v1}"
 
-  openai_api_key: "${oc.env:OPENAI_API_KEY,???}" # used for hint generation and final answer extraction
+  openai_api_key: "${oc.env:KIMI_API_KEY,???}" # aux roles (hint / answer-type / final-answer extraction) -> kimi-k3 via Moonshot
   add_message_id: true
   keep_tool_result: -1
   chinese_context: "${oc.env:CHINESE_CONTEXT,false}"

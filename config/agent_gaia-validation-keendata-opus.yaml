@@ -7,17 +7,19 @@ defaults:
 main_agent:
   prompt_class: MainAgentPrompt_GAIA
   llm: 
-    provider_class: "GPTOpenAIClient"
-    model_name: "kimi-k3"
+    provider_class: "ClaudeOpenRouterClient"
+    model_name: "anthropic/claude-opus-5"
     async_client: true
     temperature: 1.0
     top_p: 1.0
     min_p: 0.0
     top_k: -1
-    max_tokens: 49152
+    max_tokens: 32000
     reasoning_effort: "high"
-    openai_api_key: "${oc.env:KIMI_API_KEY,???}"
-    openai_base_url: "${oc.env:KIMI_BASE_URL,https://api.moonshot.cn/v1}"
+    openai_api_key: "${oc.env:OPENAI_API_KEY,???}"
+    openai_base_url: "${oc.env:OPENAI_BASE_URL,https://api.openai.com/v1}"
+    openrouter_api_key: "${oc.env:OPENROUTER_API_KEY,???}"
+    openrouter_base_url: "${oc.env:OPENROUTER_BASE_URL,https://openrouter.ai/api/v1}"
     openrouter_provider: ""
     disable_cache_control: true
     keep_tool_result: -1
@@ -46,17 +48,19 @@ sub_agents:
   agent-worker:
     prompt_class: SubAgentWorkerPrompt
     llm: 
-      provider_class: "GPTOpenAIClient"
-      model_name: "kimi-k3"
+      provider_class: "ClaudeOpenRouterClient"
+      model_name: "anthropic/claude-opus-5"
       async_client: true
       temperature: 1.0
       top_p: 1.0
       min_p: 0.0
       top_k: -1
-      max_tokens: 49152
+      max_tokens: 32000
       reasoning_effort: "medium"
-      openai_api_key: "${oc.env:KIMI_API_KEY,???}"
-      openai_base_url: "${oc.env:KIMI_BASE_URL,https://api.moonshot.cn/v1}"
+      openai_api_key: "${oc.env:OPENAI_API_KEY,???}"
+      openai_base_url: "${oc.env:OPENAI_BASE_URL,https://api.openai.com/v1}"
+      openrouter_api_key: "${oc.env:OPENROUTER_API_KEY,???}"
+      openrouter_base_url: "${oc.env:OPENROUTER_BASE_URL,https://openrouter.ai/api/v1}"
       openrouter_provider: ""
       disable_cache_control: true
       keep_tool_result: -1
