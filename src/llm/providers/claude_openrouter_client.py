@@ -135,6 +135,21 @@ class ClaudeOpenRouterClient(LLMProviderClientBase):
 
             extra_body["usage"] = {"include": True}
 
+            # Extended thinking (Anthropic models via OpenRouter): the unified
+            # `reasoning` param is translated to native thinking budget_tokens.
+            # Requires temperature=1 (our configs use 1.0) and budget < max_tokens.
+            # Verified 2026-08-25 on claude-opus-5: the multi-turn tool loop works
+            # with or without echoing reasoning_details back, so no history changes
+            # are needed. Default ON; set CLAUDE_THINKING_BUDGET=0 to disable.
+            try:
+                _thinking_budget = int(os.environ.get("CLAUDE_THINKING_BUDGET", "8192"))
+            except ValueError:
+                _thinking_budget = 8192
+            if _thinking_budget > 0:
+                extra_body["reasoning"] = {
+                    "max_tokens": min(_thinking_budget, max(1024, int(self.max_tokens) - 1024))
+                }
+
             params = {
                 "model": self.model_name,
                 "temperature": temperature,
