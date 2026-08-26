@@ -21,7 +21,7 @@ main_agent:
     openrouter_api_key: "${oc.env:OPENROUTER_API_KEY,???}"
     openrouter_base_url: "${oc.env:OPENROUTER_BASE_URL,https://openrouter.ai/api/v1}"
     openrouter_provider: ""
-    disable_cache_control: true
+    disable_cache_control: false
     keep_tool_result: -1
     oai_tool_thinking: false
   
@@ -62,7 +62,7 @@ sub_agents:
       openrouter_api_key: "${oc.env:OPENROUTER_API_KEY,???}"
       openrouter_base_url: "${oc.env:OPENROUTER_BASE_URL,https://openrouter.ai/api/v1}"
       openrouter_provider: ""
-      disable_cache_control: true
+      disable_cache_control: false
       keep_tool_result: -1
       oai_tool_thinking: false
     
