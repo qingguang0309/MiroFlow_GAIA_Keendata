@@ -48,9 +48,12 @@ class ClaudeOpenRouterClient(LLMProviderClientBase):
                 timeout=1800,
             )
 
+    # 8 attempts with waits capped at 60s (~4.3 min coverage) — same burst tolerance the
+    # GPT5 client got in patch #10; OpenRouter->Anthropic shows ~40-min-period blips >75s
+    # that exhausted the old 5-attempt policy and tripped the monitor fuse.
     @retry(
-        wait=wait_exponential(multiplier=5),
-        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=5, max=60),
+        stop=stop_after_attempt(8),
         retry=retry_if_not_exception_type(ContextLimitError),
     )
     async def _create_message(
