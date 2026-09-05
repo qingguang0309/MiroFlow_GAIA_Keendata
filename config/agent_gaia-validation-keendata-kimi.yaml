@@ -26,7 +26,7 @@ main_agent:
   tool_config:
     - tool-reasoning
 
-  max_turns: -1  # Maximum number of turns for main agent execution
+  max_turns: 30  # Maximum number of turns for main agent execution  # G3: f2 main-agent max observed 12 turns; cap 30 = 0/142 correct tasks affected
   max_tool_calls_per_turn: 10  # Maximum number of tool calls per turn
   
   input_process:
@@ -69,7 +69,7 @@ sub_agents:
       - tool-code
       - tool-audio
 
-    max_turns: -1  # Maximum number of turns for main agent execution
+    max_turns: 150  # Maximum number of turns for main agent execution  # G3: f2 sub-agent per-session P99 144 / max 223; cap 150 keeps >=99% of correct tasks intact, stops E27-style runaways (159/432 turns)
     max_tool_calls_per_turn: 10  # Maximum number of tool calls per turn
 
 

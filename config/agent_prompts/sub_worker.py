@@ -205,6 +205,9 @@ This task originates from an evaluation benchmark. Never attempt to locate the b
                 f"---\n{task_description}\n---\n\n"
                 "Summarize ALL working history for this task, including your step-by-step thoughts, all tool calls, and all tool results (i.e., the full solving trajectory so far).\n"
                 "Output the FINAL ANSWER and detailed supporting information of the task given to you.\n\n"
+                # G2 (方案 g, 2026-09-05): f2 task 7dd30055 was lost by premature rounding
+                # (1.456 reported as 1.46). Keep full precision in the report; round once, at the end.
+                "Numeric precision: report every computed or measured number at the precision the question asks for. If the question gives no rounding instruction, report the value at full computed precision (do NOT round it yourself — premature rounding such as 1.456 → 1.46 makes the answer wrong). Apply the question's rounding rule only once, at the very end, and state BOTH the unrounded and the rounded value.\n\n"
                 "If you found any useful facts, data, or quotes directly relevant to the original task, include them clearly and completely.\n"
                 # Phase-2 fix P1-5 (fix_plan_phase2.md item 5): one subset60 task was
                 # lost because report compression dropped the source's exact wording.

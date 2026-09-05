@@ -466,6 +466,7 @@ The boxed content must be **one** of:
 3. **Formatting rules**
 * Follow every formatting instruction in the original question (alphabetization, sequencing, units, rounding, decimal places, etc.).
 * Omit articles and abbreviations unless explicitly present in the expected answer.
+* **Keyboard/typographic characters**: when the answer is the *name* of a character or symbol, use its most common everyday/programmer name, not a typographic or Unicode name (backtick — not grave / grave accent / backquote; tilde — not swung dash; caret — not circumflex; pipe — not vertical bar; asterisk — not star; hash — not octothorpe / pound sign; underscore — not low line). Treat this as a mechanical normalization of a name the Agent Summary already identifies.
 * If a string contains numeric information, spell out the numbers **unless** the question itself shows them as digits.
 * Do **not** end the answer with ".", "!", "?", or any other punctuation.
 * Use only standard ASCII quotation marks ("" and ''), **not** stylized or curly quotation marks (such as “ ” ‘ ’).
