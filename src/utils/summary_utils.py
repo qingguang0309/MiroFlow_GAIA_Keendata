@@ -470,6 +470,7 @@ The boxed content must be **one** of:
 * If a string contains numeric information, spell out the numbers **unless** the question itself shows them as digits.
 * Do **not** end the answer with ".", "!", "?", or any other punctuation.
 * Use only standard ASCII quotation marks ("" and ''), **not** stylized or curly quotation marks (such as “ ” ‘ ’).
+* Use only the ASCII hyphen-minus (-) for hyphens, dashes and minus signs, **not** typographic dashes (such as – — −): e.g. Franco-Prussian War, not Franco–Prussian War.
 * Remove invisible or non-printable characters.
 * If the output is lists, apply the rules item-by-item.
 * If the question asks to transcribe, decode, unscramble, or quote a complete sentence, message, or line, the boxed answer must be that COMPLETE text — do not shorten it, drop words, or reduce it to a fragment (the shortness rules below apply to entity answers, not to requested transcriptions).
@@ -513,7 +514,7 @@ The boxed content must be **one** of:
 * John Michael Doe → John Doe
 * Mary Anne O'Neil → Mary O'Neil
 * Dr. Richard Feynman → Richard Feynman
-* INT. ZONE 42 – LEVEL B2 → Zone 42 – Level B2
+* INT. ZONE 42 – LEVEL B2 → Zone 42 - Level B2
 * INT. THE UNDERWATER BASE – MIDNIGHT → The Underwater Base
 * Sam’s Home → Sam's Home
 * Mike’s phone → Mike's phone

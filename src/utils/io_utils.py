@@ -67,7 +67,51 @@ def process_input(task_description, task_file_name):
     return initial_user_content, updated_task_description
 
 
+# Unicode punctuation -> ASCII. The official GAIA scorer strips only
+# string.punctuation (ASCII) before comparing strings, so an en dash / curly
+# quote in the model answer survives normalization and defeats an otherwise
+# exact match (f3 opus task b4cc024b: "Russian–German Legion" vs reference
+# "Russian-German Legion"). Reference answers are typed by annotators and are
+# ASCII-punctuated (validation: 0/165 references contain any Unicode dash or
+# quote), so mapping to ASCII is lossless for scoring. Math/logic symbols
+# (¬ → ↔ ∨ ≤ ...) are deliberately NOT touched.
+_ANSWER_PUNCT_MAP = {
+    0x2010: "-",  # hyphen
+    0x2011: "-",  # non-breaking hyphen
+    0x2012: "-",  # figure dash
+    0x2013: "-",  # en dash
+    0x2014: "-",  # em dash
+    0x2015: "-",  # horizontal bar
+    0x2212: "-",  # minus sign
+    0x2018: "'",  # left single quote
+    0x2019: "'",  # right single quote / apostrophe
+    0x201A: "'",
+    0x201B: "'",
+    0x201C: '"',  # left double quote
+    0x201D: '"',  # right double quote
+    0x201E: '"',
+    0x201F: '"',
+    0x2026: "...",  # ellipsis
+    0x00A0: " ",  # no-break space
+    0x2007: " ",
+    0x202F: " ",
+    0x200B: None,  # zero-width space
+    0x200C: None,
+    0x200D: None,
+    0xFEFF: None,  # BOM / zero-width no-break space
+}
+
+
 class OutputFormatter:
+    @staticmethod
+    def normalize_answer_punct(content: str) -> str:
+        """Map typographic dashes/quotes/spaces in a boxed answer to their ASCII
+        equivalents (see _ANSWER_PUNCT_MAP). Idempotent; ASCII input is returned
+        unchanged."""
+        if not content:
+            return content
+        return content.translate(_ANSWER_PUNCT_MAP)
+
     def _extract_boxed_content(self, text: str) -> str:
         """
         Extract content from \\boxed{} patterns in the text.
@@ -118,7 +162,7 @@ class OutputFormatter:
         if not matches:
             return ""
         content = self._strip_latex_text_wrapper(matches[-1])
-        return self._clean_latex_artifacts(content)
+        return self.normalize_answer_punct(self._clean_latex_artifacts(content))
 
     @staticmethod
     def _clean_latex_artifacts(content: str) -> str:
@@ -254,7 +298,9 @@ class OutputFormatter:
             # Fallback: when the boxed-rewrite step is unavailable (e.g. the extraction
             # LLM is down) and the summary itself skipped \boxed{}, take the model's own
             # FINAL CONCLUSION line verbatim instead of scoring an automatic zero.
-            boxed_result = self._extract_final_conclusion_line(final_answer_text)
+            boxed_result = self.normalize_answer_punct(
+                self._extract_final_conclusion_line(final_answer_text)
+            )
 
         if boxed_result:
             summary_lines.append(boxed_result)
