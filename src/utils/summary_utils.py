@@ -32,6 +32,25 @@ def _final_answer_model() -> str:
     return os.environ.get("FINAL_ANSWER_LLM_MODEL_NAME", "o3")
 
 
+def _arbitration_priors_enabled() -> bool:
+    """M1 (2026-09-13): two reading-arbitration priors in the extractor rubric.
+    Default ON; set EXTRACTOR_ARBITRATION_PRIORS=0 to reproduce the pre-M1 rubric
+    (used by scripts_sol/reextract_offline.py for the offline A/B)."""
+    return os.environ.get("EXTRACTOR_ARBITRATION_PRIORS", "1") != "0"
+
+
+# M1 rationale: GAIA reference answers encode what a human annotator saw with
+# consumer tools. Two recurring losses (f3 opus 08cae58d, 9f41b083; identical
+# in kimi and gpt-5.6-sol runs) had the reference value stated verbatim in the
+# Agent Summary as an "alternative", but rule 2's default ("keep the summary's
+# final answer") always won. These priors name the two situations explicitly and
+# are allowed to override the summary's own final answer; they still only pick
+# among values the summary states (the Verbatim-only hard rule is untouched).
+ARBITRATION_PRIORS_TEXT = """– **Named-tool display prior** (overrides the summary's own final answer): when the question asks for a value "according to" a named consumer website or tool (e.g. Google Finance, Google Maps, Wikipedia, a named database's web interface) and the summary states both (a) the value that tool actually displays to a user and (b) a raw / unadjusted / "true" / reconstructed value derived from other sources, choose (a), the displayed value. A qualifier such as "(without adjusting for ...)" describes what the question author did NOT do to the displayed data; it is not a request to reconstruct the underlying data.
+– **Exact-phrase count prior** (overrides the summary's own final answer): when the question asks how many times, or on how many pages, a document mentions or contains a specific word or phrase, the intended count is the number of exact, case-insensitive matches of that word or phrase as written in the question — what a PDF or browser search would find. If the summary states both an exact-phrase count and a broader count (synonyms, related terms, topical mentions, figure or chart labels), choose the exact-phrase count. Scope: this applies when the counted term is a specific name, technical term, or quoted phrase (e.g. "nuclear energy", a person's name, a product name). It does NOT apply when the counted word is a category or class noun (e.g. crustaceans, mammals, vegetables, presidents) and the document names members of that class — there the intended count is the number of items belonging to the class, i.e. the summary's topical count.
+– Both priors only select among values the summary already states verbatim; they never justify computing or inferring a new value."""
+
+
 def _generate_message_id() -> str:
     """Generate random message ID using common LLM format"""
     # Use 8-character random hex string, similar to OpenAI API format, avoid cross-conversation cache hits
@@ -280,6 +299,8 @@ Rate conservatively - if unsure between two ranges, choose the lower one.
 * **Override only from within the summary**: you may deviate from the summary's final answer ONLY when the summary's own evidence explicitly contradicts it, and the replacement must itself be stated verbatim in the summary. Formatting fixes per the rules below do not count as deviations.
 * **Selecting is not rewriting**: picking the single item the question asks for out of a pair, list, or mapping that the summary states — and dropping the rest — is required, not a violation of the verbatim rule."""
 
+    arbitration_priors = ARBITRATION_PRIORS_TEXT if _arbitration_priors_enabled() else ""
+
     full_prompts = {
         "time": f"""# Inputs
 
@@ -295,6 +316,7 @@ Rate conservatively - if unsure between two ranges, choose the lower one.
 2. **Choose among the candidates stated in the summary** (ignoring formatting and phrasing requirements at this stage).
 – Keep the summary's final answer unless the summary's own evidence clearly contradicts it and better supports another candidate stated in the summary.
 – If several candidates are comparably supported, prefer the one reflecting the most common, straightforward reading of the question — the answer an ordinary person using everyday consumer tools (web browser, Google Maps, spreadsheet filters) would reach — over the most technical or rigorous reading.
+{arbitration_priors}
 3. **Revise** your chosen answer to fully satisfy all formatting and phrasing requirements listed below (**Formatting rules**, **Additional constraints**, **Common pitfalls to avoid**, and **Quick reference examples**). These requirements override those in the original question if there is any conflict.
 
 If no answer is clearly supported by the evidence, provide a well-justified educated guess. **Always wrap your final answer in a non-empty \\boxed{{...}}.**
@@ -358,6 +380,7 @@ The boxed content must be a time.
 2. **Choose among the candidates stated in the summary** (ignoring formatting and phrasing requirements at this stage).
 – Keep the summary's final answer unless the summary's own evidence clearly contradicts it and better supports another candidate stated in the summary.
 – If several candidates are comparably supported, prefer the one reflecting the most common, straightforward reading of the question — the answer an ordinary person using everyday consumer tools (web browser, Google Maps, spreadsheet filters) would reach — over the most technical or rigorous reading.
+{arbitration_priors}
 – For questions involving calculations, if two candidates are numerically similar, prefer the summary's final answer.
 3. **Revise** your chosen answer to fully satisfy all formatting and phrasing requirements listed below (**Formatting rules**, **Additional constraints**, **Common pitfalls to avoid**, and **Quick reference examples**). These requirements override those in the original question if there is any conflict.
 
@@ -441,6 +464,7 @@ The boxed content must be a single number.
 2. **Choose among the candidates stated in the summary** (ignoring formatting and phrasing requirements at this stage).
 – Keep the summary's final answer unless the summary's own evidence clearly contradicts it and better supports another candidate stated in the summary.
 – If several candidates are comparably supported, prefer the one reflecting the most common, straightforward reading of the question — the answer an ordinary person using everyday consumer tools (web browser, Google Maps, spreadsheet filters) would reach — over the most technical or rigorous reading.
+{arbitration_priors}
 3. **Revise** your chosen answer to fully satisfy all formatting and phrasing requirements listed below (**Formatting rules**, **Additional constraints**, **Common pitfalls to avoid**, and **Quick reference examples**). These requirements override those in the original question if there is any conflict.
 
 If no answer is clearly supported by the evidence, provide a well-justified educated guess. **Always wrap your final answer in a non-empty \\boxed{{...}}.**
