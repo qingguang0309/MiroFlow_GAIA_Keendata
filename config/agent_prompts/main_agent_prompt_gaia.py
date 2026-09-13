@@ -210,7 +210,24 @@ You accomplish a given task iteratively, breaking it down into clear steps and w
                 "values and per-container/total aggregates, compute ratios and percentages from the "
                 "finest-granularity per-unit row; aggregate columns are independently rounded derived values — "
                 "use them only as a sanity check. Wording like \"the whole pint/package\" defines the object, "
-                "not which row to read.\n\n"
+                "not which row to read.\n"
+                # M2 (2026-09-13, E32/E33): five f3 opus losses were truth drift — the live
+                # source changed after the 2023 annotation (USGS NAS records, World Bank
+                # vintage, ASEAN membership, ORCID/ScienceDirect counts). In three of them
+                # the agent already held the archived state and still answered with today's
+                # value. This bullet picks the source VINTAGE; it does not override any
+                # computation (the scope limit above still applies).
+                "- **Data vintage (2023).** The reference answers were produced in 2023 from the web as it "
+                "was then. If the answer depends on a live, continuously updated source — database record "
+                "counts, publication/work counts, membership lists, statistical series that get revised, "
+                "classification browsers — and your evidence shows the source has changed since 2023 (an "
+                "archived version dated 2023 or earlier, a revision history, or a documented post-2023 "
+                "update gives a different value), the FINAL ANSWER is the value as the source stood in 2023 "
+                "(its latest state at or before 2023), and today's value is reported as the alternative. If "
+                "the question's source is such a live resource and you have not yet checked an archived "
+                "version (archive.org Wayback Machine, the page's revision history), do so before "
+                "finalizing. This does not apply when the question fixes its own date or version, or when "
+                "the value is a stable fact that does not change over time.\n\n"
                 "Summarize ALL working history for this task, including your step-by-step thoughts, all tool calls, and all tool results (i.e., the full solving trajectory so far).\n"
                 "Output the FINAL ANSWER and detailed supporting information of the task given to you.\n\n"
                 # G2 (方案 g, 2026-09-05): f2 task 7dd30055 was lost by premature rounding

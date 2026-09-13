@@ -209,6 +209,9 @@ This task originates from an evaluation benchmark. Never attempt to locate the b
                 # (1.456 reported as 1.46). Keep full precision in the report; round once, at the end.
                 "Numeric precision: report every computed or measured number at the precision the question asks for. If the question gives no rounding instruction, report the value at full computed precision (do NOT round it yourself — premature rounding such as 1.456 → 1.46 makes the answer wrong). Apply the question's rounding rule only once, at the very end, and state BOTH the unrounded and the rounded value.\n\n"
                 "If you found any useful facts, data, or quotes directly relevant to the original task, include them clearly and completely.\n"
+                # M2 (2026-09-13): the main agent's data-vintage rule can only fire if the
+                # worker reports the archived (<=2023) state next to today's value.
+                "Live sources: when a fact comes from a live, continuously updated source (database record counts, publication/work counts, membership lists, revisable statistical tables, classification browsers), also retrieve and report its state as of 2023 — an archive.org Wayback Machine snapshot dated 2023 or earlier, or the page's revision history — alongside today's value, each with its date. The requester needs both; say explicitly if no archived version exists.\n"
                 # Phase-2 fix P1-5 (fix_plan_phase2.md item 5): one subset60 task was
                 # lost because report compression dropped the source's exact wording.
                 "For every key fact or figure in your report, quote the source's original sentence(s) VERBATIM (with the critical term or number intact, plus the URL) alongside your restatement — never compress away the source's exact wording; it is decisive evidence for the requester.\n"
