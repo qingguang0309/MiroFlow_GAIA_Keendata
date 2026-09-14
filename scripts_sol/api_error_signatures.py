@@ -16,6 +16,8 @@ Categories:
   transient  (may clear on retry): rate, server, conn, timeout, request400
   tool_error (content-level tool outcome, not blocking)
 
+"Server 'X' not found" is NOT tool_infra: it is the agent naming a server that does not exist
+(e.g. tool-python-code); a content-level mistake, not an API/tool failure.
 tool_infra was added after the f3 scan found tool-reading unable to start its
 markitdown backend on AWS ("No such file or directory: 'uv'") in 31 of 165 tasks,
 silently, for the whole run.
@@ -51,7 +53,7 @@ SIGNATURES = [
         r"No endpoints found for", re.I)),
     ("tool_infra", re.compile(
         r"Failed to connect to [\w.-]+ server|No such file or directory: '(uv|uvx|npx|node)'|"
-        r"Cannot connect or get tools from server|Server '[\w.-]+' not found", re.I)),
+        r"Cannot connect or get tools from server", re.I)),
     ("rate", re.compile(r"Error code: 429|RateLimitError|Too Many Requests|Rate limit (exceeded|reached)|\b429: ", re.I)),
     ("server", re.compile(
         r"Error code: 5\d\d|InternalServerError|Internal Server Error|Service (temporarily )?Unavailable|Bad Gateway|"
