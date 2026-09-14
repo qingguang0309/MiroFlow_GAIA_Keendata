@@ -1,0 +1,20 @@
+# config/benchmark/gaia-test-full.yaml
+# Full GAIA 2023 test split: 301 tasks (L1 93 / L2 159 / L3 49, including the 0-0-0-0-0 easter egg).
+# Built by scripts_sol/build_gaia_test_full.py from the Hugging Face snapshot in data/GAIA.
+# Ground truth is masked ("?"), so every judge_result is INCORRECT; answers are scored on the leaderboard.
+# Use with an agent config via the Hydra override benchmark=gaia-test-full.
+defaults:
+  - default
+  - _self_
+
+name: "gaia-test-full"
+
+data:
+  data_dir: "${data_dir}/gaia-test-full"
+
+execution:
+  max_tasks: null  # null means no limit
+  max_concurrent: 8
+  pass_at_k: 1
+
+openai_api_key: "${oc.env:OPENAI_API_KEY,???}"
