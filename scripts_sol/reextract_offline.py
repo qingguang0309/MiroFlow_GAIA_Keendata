@@ -9,17 +9,26 @@ agents. Variants:
 The answer type per task is computed once and cached (--type-cache) so both
 variants see the identical prompt template. Run from the MiroFlow root:
 
-  OPENROUTER_API_KEY=... .venv/bin/python scripts_sol/reextract_offline.py \
+  .venv/bin/python scripts_sol/reextract_offline.py \
       logs/gaia-val/<run_dir> --variant new --out /tmp/new.jsonl --type-cache /tmp/types.json
 
-Env: FINAL_ANSWER_LLM_MODEL_NAME / ANSWER_TYPE_LLM_MODEL_NAME (default
-moonshotai/kimi-k3), EXTRACTOR_BASE_URL (default https://openrouter.ai/api/v1),
-EXTRACTOR_API_KEY (default $OPENROUTER_API_KEY).
+Keys are read from MiroFlow/.env. kimi-k3 goes through the Moonshot official API by
+project policy (2026-09-13):
+Env: FINAL_ANSWER_LLM_MODEL_NAME / ANSWER_TYPE_LLM_MODEL_NAME (default kimi-k3),
+EXTRACTOR_BASE_URL (default https://api.moonshot.cn/v1), EXTRACTOR_API_KEY (default
+$KIMI_API_KEY). To route through OpenRouter instead, set EXTRACTOR_BASE_URL=
+https://openrouter.ai/api/v1, EXTRACTOR_API_KEY=$OPENROUTER_API_KEY, both *_MODEL_NAME=
+moonshotai/kimi-k3, and pass --rpm 16 (OpenRouter caps new accounts at 20 rpm for it).
 """
 import argparse, asyncio, glob, json, os, re, sys, time
 from collections import deque
 
 sys.path.insert(0, os.getcwd())
+import dotenv  # noqa: E402
+
+# Load MiroFlow/.env before importing summary_utils (it reads AUX_LLM_CONCURRENCY at
+# import time). Existing environment variables still take precedence.
+dotenv.load_dotenv(os.path.join(os.getcwd(), ".env"))
 import src.utils.summary_utils as su  # noqa: E402
 from src.utils.io_utils import OutputFormatter  # noqa: E402
 from utils.eval_utils import verify_answer_gaia  # noqa: E402
@@ -113,15 +122,16 @@ async def main():
     ap.add_argument("run_dirs", nargs="+"); ap.add_argument("--variant", choices=["baseline", "new"], required=True)
     ap.add_argument("--out", required=True); ap.add_argument("--type-cache", required=True)
     ap.add_argument("--concurrency", type=int, default=4); ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--rpm", type=int, default=18, help="global cap on request starts/min (OpenRouter kimi-k3 new-account cap is 20)")
+    ap.add_argument("--rpm", type=int, default=60, help="global cap on request starts/min; use 16 when routing via OpenRouter (new-account cap 20 rpm for kimi-k3)")
     ap.add_argument("--only", default="", help="comma-separated task_id prefixes: restrict to these tasks (stability re-runs)")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     os.environ["EXTRACTOR_ARBITRATION_PRIORS"] = "0" if a.variant == "baseline" else "1"
-    os.environ.setdefault("FINAL_ANSWER_LLM_MODEL_NAME", "moonshotai/kimi-k3")
-    os.environ.setdefault("ANSWER_TYPE_LLM_MODEL_NAME", "moonshotai/kimi-k3")
-    base_url = os.environ.get("EXTRACTOR_BASE_URL", "https://openrouter.ai/api/v1")
-    api_key = os.environ.get("EXTRACTOR_API_KEY") or os.environ.get("OPENROUTER_API_KEY", "")
+    # kimi-k3 goes through the Moonshot official API by project policy (2026-09-13).
+    os.environ.setdefault("FINAL_ANSWER_LLM_MODEL_NAME", "kimi-k3")
+    os.environ.setdefault("ANSWER_TYPE_LLM_MODEL_NAME", "kimi-k3")
+    base_url = os.environ.get("EXTRACTOR_BASE_URL", "https://api.moonshot.cn/v1")
+    api_key = os.environ.get("EXTRACTOR_API_KEY") or os.environ.get("KIMI_API_KEY", "")
 
     tasks, skipped = [], 0
     for d in a.run_dirs:
@@ -153,7 +163,7 @@ async def main():
     print(f"[reextract] variant={a.variant} todo={len(tasks)}/{total} (resume: done={len(prior_ok)} retry_err={len(prior_err)}) skipped={skipped} model={os.environ['FINAL_ANSWER_LLM_MODEL_NAME']} base={base_url}", file=sys.stderr)
     if a.dry_run:
         return
-    assert api_key, "no API key (EXTRACTOR_API_KEY / OPENROUTER_API_KEY)"
+    assert api_key, "no API key (EXTRACTOR_API_KEY / KIMI_API_KEY)"
     install_rate_limit(a.rpm)
     print(f"[reextract] rate limit: {a.rpm} request starts/min, concurrency {a.concurrency}", file=sys.stderr)
 
