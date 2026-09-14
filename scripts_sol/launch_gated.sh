@@ -99,7 +99,7 @@ PF=(scripts_sol/preflight_api.py --config "$CONFIG")
 for o in ${OVR[@]+"${OVR[@]}"}; do PF+=(--override "$o"); done
 for w in ${PF_WAIVE[@]+"${PF_WAIVE[@]}"}; do PF+=(--waive "$w"); done
 say "preflight:$(q "${PF[@]}")"
-in_tmux "${SESSION}_preflight" "$OUT/preflight.out" env ${ENV_WORDS[@]+"${ENV_WORDS[@]}"} "$PY" "${PF[@]}"; rc=$?
+in_tmux "${SESSION}_preflight" "$OUT/preflight.out" env ${UNSET[@]+"${UNSET[@]}"} ${ENV_WORDS[@]+"${ENV_WORDS[@]}"} "$PY" "${PF[@]}"; rc=$?
 [ "$rc" = "0" ] || { say "STOP: preflight failed (rc=$rc). Investigate; waive only a failure you have explained."; exit 5; }
 
 TR=(); for w in ${TR_WAIVE[@]+"${TR_WAIVE[@]}"}; do TR+=(--waive "$w"); done
@@ -115,7 +115,7 @@ print(",".join(dict.fromkeys(models)))
 EOF
 )
 fi
-RUN_BASE=(env ${ENV_WORDS[@]+"${ENV_WORDS[@]}"} "$UV" run main.py common-benchmark "--config_file_name=$CONFIG")
+RUN_BASE=(env ${UNSET[@]+"${UNSET[@]}"} ${ENV_WORDS[@]+"${ENV_WORDS[@]}"} "$UV" run main.py common-benchmark "--config_file_name=$CONFIG")
 
 # 3) smoke: the real pipeline on a few tasks, inside tmux, then the strict trace gate
 if [ "$NO_SMOKE" = "0" ]; then
