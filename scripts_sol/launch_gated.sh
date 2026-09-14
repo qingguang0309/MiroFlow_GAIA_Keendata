@@ -68,17 +68,24 @@ in_tmux() {  # session_name logfile command...
 say "=== launch_gated config=$CONFIG out=$OUT session=$SESSION dry_run=$DRY"
 ENV_WORDS=(); [ -n "$ENV_STR" ] && read -ra ENV_WORDS <<< "$ENV_STR"
 
-# 0) environment hygiene
+# 0) environment hygiene. Keys live only in .env, but MiroFlow's dotenv never overrides a variable
+# that already exists: a key exported in the calling shell or in the shared tmux server's global
+# environment silently wins over .env. So every command below runs under `env -u NAME` for each
+# such inherited variable, except the ones passed explicitly via --env. The shared tmux server's
+# environment itself is never modified (other people's sessions use it).
 case " $ENV_STR " in
   *" KIMI_API_KEY="*) case " $ENV_STR " in *" KIMI_BASE_URL="*) ;; *) say "REFUSE: --env sets KIMI_API_KEY without KIMI_BASE_URL; tool-reasoning and tool-image-video read both (E35)"; exit 3;; esac;;
 esac
 for kv in ${ENV_WORDS[@]+"${ENV_WORDS[@]}"}; do say "env override ${kv%%=*}=$(mask "${kv#*=}")"; done
-RISKY='^(KIMI_|HINT_LLM|FINAL_ANSWER_LLM|ANSWER_TYPE_LLM|OPENROUTER_|OPENAI_|GEMINI_|SERPER_|JINA_|E2B_)'
-for kv in $(env | grep -E "$RISKY" | cut -d= -f1); do
-  say "REFUSE: $kv is set in the calling shell and would silently override .env if tmux inherits it; unset it or pass it via --env"; exit 3
+# ANTHROPIC_*: tool-image-video silently switches VQA to Claude when ANTHROPIC_API_KEY is set.
+RISKY='^(KIMI_|HINT_LLM|FINAL_ANSWER_LLM|ANSWER_TYPE_LLM|OPENROUTER_|OPENAI_|ANTHROPIC_|GEMINI_|SERPER_|JINA_|E2B_|REASONING_|VQA_)'
+UNSET=()
+for name in $( { env; tmux show-environment -g 2>/dev/null; } | grep -E "$RISKY" | cut -d= -f1 | sort -u ); do
+  case " $ENV_STR " in *" $name="*) continue;; esac
+  UNSET+=(-u "$name")
 done
-if tmux show-environment -g 2>/dev/null | grep -qE "$RISKY"; then
-  say "REFUSE: the tmux server's global environment sets: $(tmux show-environment -g | grep -E "$RISKY" | cut -d= -f1 | tr '\n' ' ')- every tmux session would override .env with it"; exit 3
+if [ ${#UNSET[@]} -gt 0 ]; then
+  say "clearing inherited variables so .env governs: $(printf '%s ' "${UNSET[@]}" | sed 's/-u //g')"
 fi
 
 # 1) code state
