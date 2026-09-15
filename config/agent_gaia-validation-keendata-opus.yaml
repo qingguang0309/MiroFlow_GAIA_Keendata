@@ -71,7 +71,7 @@ sub_agents:
       - tool-image-video
       - tool-reading
       - tool-code
-      - tool-audio
+      - tool-audio-openrouter  # E37: server tool-audio via openai/gpt-audio-mini on OpenRouter; the keendata router has no audio model
 
     max_turns: 150  # Maximum number of turns for main agent execution  # G3: f3 opus sub-agent per-session max 63; cap 150 = 0/64 correct sessions affected, stops E27-style runaways
     max_tool_calls_per_turn: 10  # Maximum number of tool calls per turn

@@ -3,11 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import shutil
+import subprocess
 import tempfile
 import requests
 from urllib.parse import urlparse
 from fastmcp import FastMCP
-from openai import OpenAI
+import openai
+from openai import AsyncOpenAI, OpenAI
 import base64
 import mimetypes
 import wave
@@ -24,6 +27,24 @@ OPENAI_TRANSCRIPTION_MODEL_NAME = os.environ.get(
 )
 OPENAI_AUDIO_MODEL_NAME = os.environ.get(
     "OPENAI_AUDIO_MODEL_NAME", "gpt-4o-audio-preview"
+)
+
+# Chat-model audio backend (E37, 2026-09-15). When the tool yaml sets AUDIO_API_KEY
+# (config/tool/tool-audio-openrouter.yaml), both tools send the audio to an OpenAI-compatible
+# chat model that accepts audio input, e.g. openai/gpt-audio-mini on OpenRouter. The OPENAI_*
+# path below needs an /audio/transcriptions endpoint and gpt-4o-audio-preview; the keendata
+# router has neither, so it failed in every run. Configs that still use tool-audio.yaml (no
+# AUDIO_* variables) keep that path unchanged.
+AUDIO_API_KEY = os.environ.get("AUDIO_API_KEY", "")
+AUDIO_BASE_URL = os.environ.get("AUDIO_BASE_URL", "https://openrouter.ai/api/v1")
+AUDIO_MODEL_NAME = os.environ.get("AUDIO_MODEL_NAME", "openai/gpt-audio-mini")
+AUDIO_MAX_TOKENS = 16000  # gpt-audio-mini allows 16384 completion tokens; long recordings give long transcripts
+CHAT_AUDIO_MAX_BYTES = 15 * 1024 * 1024  # larger files are re-encoded to mono 16 kHz mp3 first
+TRANSCRIBE_PROMPT = (
+    "Transcribe the speech in this audio verbatim, in its original language. Keep every word as "
+    "spoken, including numbers and names; do not summarize, translate, correct or comment. Mark "
+    "unclear words as [inaudible]. If the audio contains no speech, say briefly what it contains "
+    "instead. Output only the transcript."
 )
 
 # Initialize FastMCP server
@@ -128,6 +149,134 @@ def _encode_audio_file(audio_path: str) -> tuple[str, str]:
     return encoded_string, file_format
 
 
+def _chat_audio_input(audio_path_or_url: str) -> tuple[str, str, float]:
+    """Load a local file or URL for chat audio input: (base64 data, format, duration).
+
+    Chat audio input accepts only mp3 and wav, so other formats (m4a, aac, ogg, flac, ...)
+    and files above CHAT_AUDIO_MAX_BYTES are re-encoded to mono 16 kHz mp3 with ffmpeg.
+    """
+    temp_paths = []
+    try:
+        if os.path.exists(audio_path_or_url):
+            source = audio_path_or_url
+        else:
+            response = requests.get(
+                audio_path_or_url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                },
+                timeout=120,
+            )
+            response.raise_for_status()
+            if not response.content:
+                raise ValueError("Downloaded file is empty.")
+            suffix = _get_audio_extension(
+                audio_path_or_url, response.headers.get("content-type", "")
+            )
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                temp_file.write(response.content)
+                source = temp_file.name
+            temp_paths.append(source)
+
+        duration = _get_audio_duration(source)
+        file_format = {".mp3": "mp3", ".wav": "wav"}.get(
+            os.path.splitext(source)[1].lower()
+        )
+        if file_format is None or os.path.getsize(source) > CHAT_AUDIO_MAX_BYTES:
+            fd, converted = tempfile.mkstemp(suffix=".mp3")
+            os.close(fd)
+            temp_paths.append(converted)
+            result = subprocess.run(
+                [shutil.which("ffmpeg") or "ffmpeg", "-y", "-v", "error", "-i", source,
+                 "-ac", "1", "-ar", "16000", "-b:a", "48k", converted],
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"ffmpeg could not convert the audio to mp3: {result.stderr.strip()[:300]}"
+                )
+            source, file_format = converted, "mp3"
+
+        with open(source, "rb") as audio_file:
+            encoded = base64.b64encode(audio_file.read()).decode("utf-8")
+        return encoded, file_format, duration
+    finally:
+        for path in temp_paths:
+            if os.path.exists(path):
+                os.remove(path)
+
+
+async def _chat_audio(prompt: str, encoded: str, file_format: str, system: str = "") -> str:
+    """One chat completion with audio input. Retries only transient failures."""
+    client = AsyncOpenAI(api_key=AUDIO_API_KEY, base_url=AUDIO_BASE_URL, timeout=600)
+    messages = [{"role": "system", "content": system}] if system else []
+    messages.append(
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "input_audio",
+                    "input_audio": {"data": encoded, "format": file_format},
+                },
+            ],
+        }
+    )
+    error = None
+    for attempt in range(3):
+        if attempt:
+            await asyncio.sleep(5 * 2**attempt)
+        try:
+            response = await client.chat.completions.create(
+                model=AUDIO_MODEL_NAME, messages=messages, max_tokens=AUDIO_MAX_TOKENS
+            )
+        except openai.APIStatusError as e:
+            if e.status_code < 500 and e.status_code not in (408, 409, 429):
+                raise  # key, credit, model and request errors do not improve on retry
+            error = e
+            continue
+        except openai.APIConnectionError as e:
+            error = e
+            continue
+        choice = response.choices[0] if response.choices else None
+        text = (choice.message.content or "").strip() if choice else ""
+        if text:
+            return text
+        error = RuntimeError(
+            f"{AUDIO_MODEL_NAME} returned no text (finish_reason="
+            f"{choice.finish_reason if choice else None}, error={getattr(response, 'error', None)})"
+        )
+    raise error
+
+
+async def _chat_audio_transcription(audio_path_or_url: str) -> str:
+    if not os.path.exists(audio_path_or_url) and "home/user" in audio_path_or_url:
+        return "The audio_transcription tool cannot access to sandbox file, please use the local path provided by original instruction"
+    try:
+        encoded, file_format, _ = _chat_audio_input(audio_path_or_url)
+        return await _chat_audio(TRANSCRIBE_PROMPT, encoded, file_format)
+    except Exception as e:
+        return f"[ERROR]: Audio transcription failed: {e}\nNote: Files from sandbox are not available. You should use local path given in the instruction. The file should be in a common audio format such as MP3, WAV, or M4A.\nNote: YouTube video URL is not supported."
+
+
+async def _chat_audio_question_answering(audio_path_or_url: str, question: str) -> str:
+    if not os.path.exists(audio_path_or_url) and "home/user" in audio_path_or_url:
+        return "The audio_question_answering tool cannot access to sandbox file, please use the local path provided by original instruction"
+    try:
+        encoded, file_format, duration = _chat_audio_input(audio_path_or_url)
+        answer = await _chat_audio(
+            f"Answer the following question based on the given audio information:\n\n{question}",
+            encoded,
+            file_format,
+            system="You are a helpful assistant specializing in audio analysis.",
+        )
+    except Exception as e:
+        return f"[ERROR]: Audio question answering failed when calling {AUDIO_MODEL_NAME}: {e}\nNote: Files from sandbox are not available. You should use local path given in the instruction. The file should be in a common audio format such as MP3, WAV, or M4A.\nNote: YouTube video URL is not supported."
+    return f"{answer}\n\nAudio duration: {duration} seconds"
+
+
 @mcp.tool()
 async def audio_transcription(audio_path_or_url: str) -> str:
     """
@@ -138,6 +287,9 @@ async def audio_transcription(audio_path_or_url: str) -> str:
     Returns:
         The transcription of the audio file.
     """
+    if AUDIO_API_KEY:
+        return await _chat_audio_transcription(audio_path_or_url)
+
     max_retries = 3
     retry = 0
     transcription = None
@@ -211,6 +363,9 @@ async def audio_question_answering(audio_path_or_url: str, question: str) -> str
     Returns:
         The answer to the question, and the duration of the audio file.
     """
+    if AUDIO_API_KEY:
+        return await _chat_audio_question_answering(audio_path_or_url, question)
+
     try:
         client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 

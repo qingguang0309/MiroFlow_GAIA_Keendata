@@ -1,0 +1,14 @@
+# Audio tools through a chat model with audio input (E37, 2026-09-15): openai/gpt-audio-mini on
+# OpenRouter. Same server name and tools as tool-audio.yaml, so agent prompts, trace scans and waivers
+# stay the same; AUDIO_API_KEY switches src/tool/mcp_servers/audio_mcp_server.py to its chat backend.
+# The key is the OpenRouter key already in .env. Only agent_gaia-validation-keendata-opus.yaml uses
+# this file; every other config keeps tool-audio.yaml and its OPENAI_* path.
+name: "tool-audio"
+tool_command: "python"
+args:
+  - "-m"
+  - "src.tool.mcp_servers.audio_mcp_server"
+env:
+  AUDIO_API_KEY: "${oc.env:OPENROUTER_API_KEY}"
+  AUDIO_BASE_URL: "${oc.env:OPENROUTER_BASE_URL,https://openrouter.ai/api/v1}"
+  AUDIO_MODEL_NAME: "${oc.env:AUDIO_MODEL_NAME,openai/gpt-audio-mini}"

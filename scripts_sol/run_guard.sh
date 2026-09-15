@@ -117,7 +117,8 @@ LLM_BASE=$(llm_err_count)
 last_scan=0
 anomaly_was_set=0
 while true; do
-  tmux has-session -t "$SESS" 2>/dev/null || { log "run session ended, guard exit"; exit 0; }
+  # exact match (=): a plain -t also matches by prefix, e.g. this guard's own ${SESS}_guard session
+  tmux has-session -t "=$SESS" 2>/dev/null || { log "run session ended, guard exit"; exit 0; }
   now=$(date +%s)
   if [ -f "$D/FROZEN_API_ANOMALY" ]; then
     anomaly_was_set=1

@@ -55,10 +55,10 @@ q() { local out=""; for x in "$@"; do out="$out $(printf '%q' "$x")"; done; echo
 in_tmux() {  # session_name logfile command...
   local name=$1 logf=$2; shift 2
   local rcf="$logf.rc"; rm -f "$rcf"
-  tmux has-session -t "$name" 2>/dev/null && { say "REFUSE: tmux session $name already exists"; return 97; }
+  tmux has-session -t "=$name" 2>/dev/null && { say "REFUSE: tmux session $name already exists"; return 97; }
   tmux new-session -d -s "$name" "cd $(printf '%q' "$PWD") &&$(q "$@") > $(printf '%q' "$logf") 2>&1; echo \$? > $(printf '%q' "$rcf")"
   while [ ! -f "$rcf" ]; do
-    if ! tmux has-session -t "$name" 2>/dev/null; then sleep 2; [ -f "$rcf" ] || { say "tmux session $name ended without an exit code"; return 98; }; fi
+    if ! tmux has-session -t "=$name" 2>/dev/null; then sleep 2; [ -f "$rcf" ] || { say "tmux session $name ended without an exit code"; return 98; }; fi
     sleep 5
   done
   cat "$logf" | tee -a "$LOG"
@@ -78,7 +78,8 @@ case " $ENV_STR " in
 esac
 for kv in ${ENV_WORDS[@]+"${ENV_WORDS[@]}"}; do say "env override ${kv%%=*}=$(mask "${kv#*=}")"; done
 # ANTHROPIC_*: tool-image-video silently switches VQA to Claude when ANTHROPIC_API_KEY is set.
-RISKY='^(KIMI_|HINT_LLM|FINAL_ANSWER_LLM|ANSWER_TYPE_LLM|OPENROUTER_|OPENAI_|ANTHROPIC_|GEMINI_|SERPER_|JINA_|E2B_|REASONING_|VQA_)'
+# AUDIO_*: tool-audio-openrouter.yaml reads AUDIO_MODEL_NAME (E37).
+RISKY='^(KIMI_|HINT_LLM|FINAL_ANSWER_LLM|ANSWER_TYPE_LLM|OPENROUTER_|OPENAI_|ANTHROPIC_|GEMINI_|SERPER_|JINA_|E2B_|REASONING_|VQA_|AUDIO_)'
 UNSET=()
 for name in $( { env; tmux show-environment -g 2>/dev/null; } | grep -E "$RISKY" | cut -d= -f1 | sort -u ); do
   case " $ENV_STR " in *" $name="*) continue;; esac
@@ -145,8 +146,9 @@ if [ "$DRY" = "1" ]; then
   say "dry-run: would start guard '${SESSION}_guard' (floor=$FLOOR) with ${#TR_WAIVE[@]} trace waiver(s)"
   exit 0
 fi
-tmux has-session -t "$SESSION" 2>/dev/null && { say "REFUSE: tmux session $SESSION already exists"; exit 7; }
-tmux has-session -t "${SESSION}_guard" 2>/dev/null && { say "REFUSE: tmux session ${SESSION}_guard already exists"; exit 7; }
+# exact session names (=): a plain -t also matches by prefix, so ${SESSION}_smoke would count as $SESSION
+tmux has-session -t "=$SESSION" 2>/dev/null && { say "REFUSE: tmux session $SESSION already exists"; exit 7; }
+tmux has-session -t "=${SESSION}_guard" 2>/dev/null && { say "REFUSE: tmux session ${SESSION}_guard already exists"; exit 7; }
 : > "$OUT/.trace_waivers"; for w in ${TR_WAIVE[@]+"${TR_WAIVE[@]}"}; do echo "$w" >> "$OUT/.trace_waivers"; done
 T0=$(date +%s)
 tmux new-session -d -s "$SESSION" "$RUN_CMD"

@@ -106,10 +106,15 @@ async def llm_probe(name, key, base, model, gpt5=False):
         record(f"live:{name}", False, f"{model} @ {urlparse(base).hostname}: {type(e).__name__}: {str(e)[:220]}")
 
 
-def tool_env(tool_name):
-    path = os.path.join(os.getcwd(), "config", "tool", f"{tool_name}.yaml")
-    cfg = OmegaConf.load(path)
-    return OmegaConf.to_container(cfg.get("env", {}), resolve=True) or {}
+def tool_env(cfg, server):
+    """env block of the tool yaml that provides `server` in this agent config. The yaml file name need
+    not equal the server name: tool-audio-openrouter.yaml provides tool-audio."""
+    agents = [cfg.main_agent] + list((cfg.get("sub_agents") or {}).values())
+    for tool in dict.fromkeys(t for agent in agents for t in (agent.get("tool_config") or [])):
+        tool_cfg = OmegaConf.load(os.path.join(os.getcwd(), "config", "tool", f"{tool}.yaml"))
+        if tool_cfg.get("name", tool) == server:
+            return OmegaConf.to_container(tool_cfg.get("env", {}), resolve=True) or {}
+    return {}
 
 
 async def tool_probe(managers, server, tool, args, expect=None, name=None):
@@ -190,12 +195,12 @@ async def main():
             record(f"{s}:*", False, "no functional probe defined for this server; add one or waive it")
 
     if "tool-reasoning" in servers:
-        env = tool_env("tool-reasoning")
+        env = tool_env(cfg, "tool-reasoning")
         if env.get("OPENAI_API_KEY"):
             lint_pair("tool-reasoning(openai-compatible)", env["OPENAI_API_KEY"], env.get("OPENAI_BASE_URL", ""))
         await tool_probe(managers, "tool-reasoning", "reasoning", {"question": "What is 17 multiplied by 23? Reply with the number only."}, expect="391")
     if "tool-image-video" in servers:
-        env = tool_env("tool-image-video")
+        env = tool_env(cfg, "tool-image-video")
         if env.get("ANTHROPIC_API_KEY"):
             print("  note: tool-image-video uses Anthropic for VQA (ANTHROPIC_API_KEY is set)")
         elif env.get("OPENAI_API_KEY"):
@@ -205,9 +210,26 @@ async def main():
         await tool_probe(managers, "tool-image-video", "visual_audio_youtube_analyzing",
                          {"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "question": "What animals appear in this video? A few words."})
     if "tool-audio" in servers:
-        env = tool_env("tool-audio")
-        lint_pair("tool-audio(openai-compatible)", env.get("OPENAI_API_KEY", ""), env.get("OPENAI_BASE_URL", ""))
-        await tool_probe(managers, "tool-audio", "audio_transcription", {"audio_path_or_url": wav})
+        env = tool_env(cfg, "tool-audio")
+        audio_in = wav
+        if env.get("AUDIO_API_KEY"):  # chat backend, tool-audio-openrouter.yaml (E37)
+            lint_pair("tool-audio(chat audio)", env["AUDIO_API_KEY"], env.get("AUDIO_BASE_URL", ""))
+            import shutil
+            import subprocess
+            # an m4a input makes the server convert it with ffmpeg, as it must for m4a/aac/ogg/flac tasks
+            ffmpeg, m4a = shutil.which("ffmpeg"), os.path.join(tmp, "tone.m4a")
+            if ffmpeg and subprocess.run([ffmpeg, "-y", "-v", "error", "-i", wav, m4a]).returncode == 0:
+                audio_in = m4a
+            else:
+                record("tool-audio:ffmpeg", False, "ffmpeg missing or failed; the chat backend converts m4a/aac/ogg/flac input with it")
+        else:
+            lint_pair("tool-audio(openai-compatible)", env.get("OPENAI_API_KEY", ""), env.get("OPENAI_BASE_URL", ""))
+        await tool_probe(managers, "tool-audio", "audio_transcription", {"audio_path_or_url": audio_in})
+        # question answering is a separate model call: the 2026-09-14 test launch probed only transcription,
+        # so a 404 from question answering surfaced mid-run instead
+        await tool_probe(managers, "tool-audio", "audio_question_answering",
+                         {"audio_path_or_url": wav, "question": "Is this recording a pure tone or human speech? Answer with one word: tone or speech."},
+                         expect="tone")
     if "tool-searching" in servers:
         await tool_probe(managers, "tool-searching", "google_search", {"q": "Wikipedia", "num": 1}, expect="wikipedia")
         # Jina sometimes serves a cached snapshot with different page text; require content about
