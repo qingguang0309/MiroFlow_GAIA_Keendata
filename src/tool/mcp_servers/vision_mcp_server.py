@@ -29,11 +29,12 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o")
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# google_key / GEMINI_MODEL are accepted as aliases, as in an uncommitted edit found on AWS on 2026-09-17.
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("google_key", "")
 # gemini-2.5-pro is no longer available to new API users (404), and every Gemini call below used to
 # hardcode it. All calls now use GEMINI_MODEL_NAME (E38, 2026-09-15). Pro models need a billing-enabled
 # AI Studio project; on the free tier they answer 429.
-GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-3.1-pro-preview")
+GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME") or os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".mpeg", ".mpg", ".wmv", ".flv", ".3gp")
 
 # Initialize FastMCP server
