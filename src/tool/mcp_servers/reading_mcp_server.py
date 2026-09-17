@@ -4,6 +4,7 @@
 
 import argparse
 import os
+import sys
 import tempfile
 import aiohttp
 import atexit
@@ -21,6 +22,10 @@ setup_mcp_logging(tool_name=os.path.basename(__file__))
 mcp = FastMCP("reading-mcp-server")
 SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "")
 JINA_API_KEY = os.environ.get("JINA_API_KEY", "")
+# markitdown-mcp is installed in the same virtual environment as this server, so start it directly instead of
+# through `uv run`: on AWS the run's PATH lacks ~/.local/bin, `uv` was not found, and read_file failed on every
+# call in the f3, g and test runs (E38, 2026-09-15).
+MARKITDOWN_MCP = os.path.join(os.path.dirname(sys.executable), "markitdown-mcp")
 
 
 @mcp.tool()
@@ -101,10 +106,13 @@ async def read_file(uri: str) -> str:
     tool_name = "convert_to_markdown"
     arguments = {"uri": uri}
 
-    server_params = StdioServerParameters(
-        command="uv",
-        args=["run", "--active", "--", "markitdown-mcp"],
-    )
+    if os.path.exists(MARKITDOWN_MCP):
+        server_params = StdioServerParameters(command=MARKITDOWN_MCP, args=[])
+    else:
+        server_params = StdioServerParameters(
+            command="uv",
+            args=["run", "--active", "--", "markitdown-mcp"],
+        )
 
     result_content = ""
     try:

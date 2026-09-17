@@ -30,7 +30,11 @@ OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.5-pro")
+# gemini-2.5-pro is no longer available to new API users (404), and every Gemini call below used to
+# hardcode it. All calls now use GEMINI_MODEL_NAME (E38, 2026-09-15). Pro models need a billing-enabled
+# AI Studio project; on the free tier they answer 429.
+GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-3.1-pro-preview")
+VIDEO_EXTENSIONS = (".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".mpeg", ".mpg", ".wmv", ".flv", ".3gp")
 
 # Initialize FastMCP server
 setup_mcp_logging(tool_name=os.path.basename(__file__))
@@ -241,7 +245,7 @@ async def call_gemini_vision(image_path_or_url: str, question: str) -> str:
             client = genai.Client(api_key=GEMINI_API_KEY)
 
             response = client.models.generate_content(
-                model="gemini-2.5-pro",
+                model=GEMINI_MODEL_NAME,
                 contents=[
                     image,
                     types.Part(text=question),
@@ -352,15 +356,29 @@ Please provide a comprehensive analysis that demonstrates careful observation an
     return f"OCR results:\n{ocr_result}\n\nVQA result:\n{vqa_result}"
 
 
-# The tool visual_audio_youtube_analyzing only support single YouTube URL as input for now, though GEMINI can support multiple URLs up to 10 per request.
+async def _upload_local_video(client, path: str):
+    """Upload a local video with the Gemini Files API and wait until it can be used in a prompt."""
+    uploaded = client.files.upload(file=path)
+    for _ in range(120):  # up to 10 minutes of server-side processing
+        if getattr(uploaded.state, "name", str(uploaded.state)) != "PROCESSING":
+            break
+        await asyncio.sleep(5)
+        uploaded = client.files.get(name=uploaded.name)
+    state = getattr(uploaded.state, "name", str(uploaded.state))
+    if state != "ACTIVE":
+        raise RuntimeError(f"uploaded video is not ready (state {state})")
+    return uploaded
+
+
+# The tool visual_audio_youtube_analyzing takes one YouTube URL or one local video file per call, though GEMINI can support multiple URLs up to 10 per request.
 @mcp.tool()
 async def visual_audio_youtube_analyzing(
     url: str, question: str = "", provide_transcribe: bool = False
 ) -> str:
-    """Analyzes public YouTube video audiovisual content to answer questions or provide transcriptions. This tool processes both audio tracks and visual frames from YouTube videos. This tool could be primarily used when analyzing YouTube video content. Only supports YouTube Video URLs containing youtube.com/watch, youtube.com/shorts, or youtube.com/live for now.
+    """Analyzes the audiovisual content of a public YouTube video or a local video file to answer questions or provide transcriptions. This tool processes both audio tracks and visual frames. Supports YouTube Video URLs containing youtube.com/watch, youtube.com/shorts, or youtube.com/live, and local video files (mp4, mov, m4v, avi, mkv, webm, mpeg, wmv, flv, 3gp) given by their local path.
 
     Args:
-        url: The YouTube video URL.
+        url: The YouTube video URL, or the local path of a video file. Files from sandbox are not supported.
         question: The specific question about the video content. Use timestamp format MM:SS or MM:SS-MM:SS if needed to specify a specific time (e.g., 01:45, 03:20-03:45). Leave empty if only requesting transcription.
         provide_transcribe: When set to true, returns a complete timestamped transcription of both spoken content and visual elements throughout the video.
 
@@ -370,17 +388,33 @@ async def visual_audio_youtube_analyzing(
     if GEMINI_API_KEY == "":
         return "[ERROR]: GEMINI_API_KEY is not set, visual_audio_youtube_analyzing tool is not available."
 
-    if (
-        "youtube.com/watch" not in url
-        and "youtube.com/shorts" not in url
-        and "youtube.com/live" not in url
-    ):
-        return f"[ERROR]: Invalid URL: '{url}'. YouTube Video URL must contain youtube.com/watch, youtube.com/shorts, or youtube.com/live"
+    local_path = url[len("file://"):] if url.startswith("file://") else url[len("file:"):] if url.startswith("file:") else url
+    is_local_video = os.path.isfile(local_path) and local_path.lower().endswith(VIDEO_EXTENSIONS)
+    if not is_local_video:
+        if "home/user" in url:
+            return "The visual_audio_youtube_analyzing tool cannot access to sandbox file, please use the local path provided by original instruction"
+        if (
+            "youtube.com/watch" not in url
+            and "youtube.com/shorts" not in url
+            and "youtube.com/live" not in url
+        ):
+            return f"[ERROR]: Invalid URL: '{url}'. Provide a YouTube Video URL containing youtube.com/watch, youtube.com/shorts, or youtube.com/live, or the local path of a video file ({', '.join(VIDEO_EXTENSIONS)})"
 
     if question == "" and not provide_transcribe:
         return "[ERROR]: You must provide a question to ask about the video content or set provide_transcribe to True."
 
     client = genai.Client(api_key=GEMINI_API_KEY)
+    uploaded_video = None
+    if is_local_video:
+        try:
+            uploaded_video = await _upload_local_video(client, local_path)
+        except Exception as e:
+            return f"[ERROR]: Failed to upload the local video {local_path}: {e}"
+        video_part = types.Part(
+            file_data=types.FileData(file_uri=uploaded_video.uri, mime_type=uploaded_video.mime_type)
+        )
+    else:
+        video_part = types.Part(file_data=types.FileData(file_uri=url))
     if provide_transcribe:
         # prompt from GEMINI official document
         prompt = "Transcribe the audio from this video, giving timestamps for salient events in the video. Also provide visual descriptions."
@@ -389,10 +423,10 @@ async def visual_audio_youtube_analyzing(
         while retry_count <= max_retry:
             try:
                 transcribe_response = client.models.generate_content(
-                    model="gemini-2.5-pro",
+                    model=GEMINI_MODEL_NAME,
                     contents=types.Content(
                         parts=[
-                            types.Part(file_data=types.FileData(file_uri=url)),
+                            video_part,
                             types.Part(text=prompt),
                         ]
                     ),
@@ -455,10 +489,10 @@ async def visual_audio_youtube_analyzing(
         while retry_count <= max_retry:
             try:
                 response = client.models.generate_content(
-                    model="gemini-2.5-pro",
+                    model=GEMINI_MODEL_NAME,
                     contents=types.Content(
                         parts=[
-                            types.Part(file_data=types.FileData(file_uri=url)),
+                            video_part,
                             types.Part(text=prompt),
                         ]
                     ),
@@ -510,6 +544,11 @@ async def visual_audio_youtube_analyzing(
                     answer_content = f"[ERROR]: Failed to answer the question: {str(e)}"
                     break
 
+    if uploaded_video is not None:
+        try:
+            client.files.delete(name=uploaded_video.name)
+        except Exception:
+            pass  # uploads expire on their own after 48 hours
     hint = "\n\nHint: Large videos may trigger rate limits causing failures. If you need more website information rather than video visual content itself (such as video subtitles, titles, descriptions, key moments), you can also call tool `scrape_website` tool."
     return transcribe_content + answer_content + hint
 

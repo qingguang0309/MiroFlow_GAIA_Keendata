@@ -207,8 +207,19 @@ async def main():
             lint_pair("tool-image-video(openai-compatible)", env["OPENAI_API_KEY"], env.get("OPENAI_BASE_URL", ""))
         await tool_probe(managers, "tool-image-video", "visual_question_answering",
                          {"image_path_or_url": img, "question": "What single color fills this image? One word."}, expect="red")
+        # "Me at the zoo" has one unambiguous answer, so a content check is safe here (unlike a pure-tone audio probe)
         await tool_probe(managers, "tool-image-video", "visual_audio_youtube_analyzing",
-                         {"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "question": "What animals appear in this video? A few words."})
+                         {"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "question": "What animals appear in this video? A few words."},
+                         expect="elephant")
+        import shutil
+        import subprocess
+        # a local video file goes through the Gemini Files API upload path (E38; the test set has a .mov attachment)
+        mp4, ffmpeg = os.path.join(tmp, "pattern.mp4"), shutil.which("ffmpeg")
+        if ffmpeg and subprocess.run([ffmpeg, "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=3:size=320x240:rate=10", mp4]).returncode == 0:
+            await tool_probe(managers, "tool-image-video", "visual_audio_youtube_analyzing",
+                             {"url": mp4, "question": "Describe this video in a few words."}, name="tool-image-video:local_video")
+        else:
+            record("tool-image-video:local_video", False, "ffmpeg missing or failed; cannot build the local video probe")
     if "tool-audio" in servers:
         env = tool_env(cfg, "tool-audio")
         audio_in = wav
