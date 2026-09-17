@@ -54,7 +54,7 @@ SIGNATURES = [
     ("tool_infra", re.compile(
         r"Failed to connect to [\w.-]+ server|No such file or directory: '(uv|uvx|npx|node)'|"
         r"Cannot connect or get tools from server", re.I)),
-    ("rate", re.compile(r"Error code: 429|RateLimitError|Too Many Requests|Rate limit (exceeded|reached)|\b429: ", re.I)),
+    ("rate", re.compile(r"Error code: 429|RateLimitError|Too Many Requests|Rate limit (exceeded|reached)|\b429: |RESOURCE_EXHAUSTED", re.I)),
     ("server", re.compile(
         r"Error code: 5\d\d|InternalServerError|Internal Server Error|Service (temporarily )?Unavailable|Bad Gateway|"
         r"Gateway Time-?out|Serper API error: 5\d\d", re.I)),

@@ -68,7 +68,7 @@ sub_agents:
     
     tool_config:
       - tool-searching
-      - tool-image-video
+      - tool-image-video-gemini  # E38: image questions and video on Gemini 3.1 Pro (kimi-k3 took minutes per image)
       - tool-reading
       - tool-code
       - tool-audio-openrouter  # E37: server tool-audio via openai/gpt-audio-mini on OpenRouter; the keendata router has no audio model

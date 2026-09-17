@@ -1,0 +1,13 @@
+# Image questions and video analysis both on Gemini (E38, 2026-09-17): visual_question_answering uses
+# gemini-3.1-pro-preview instead of kimi-k3, which took minutes per large image and whose Moonshot endpoint rejects
+# remote image URLs; visual_audio_youtube_analyzing is unchanged. Same server name and tools as tool-image-video.yaml,
+# so prompts, trace scans and waivers stay the same. Used by agent_gaia-validation-keendata-opus.yaml only.
+name: "tool-image-video"
+tool_command: "python"
+args:
+  - "-m"
+  - "src.tool.mcp_servers.vision_mcp_server"
+env:
+  VQA_PROVIDER: "gemini"
+  GEMINI_API_KEY: "${oc.env:GEMINI_API_KEY}"
+  GEMINI_MODEL_NAME: "${oc.env:GEMINI_MODEL_NAME,gemini-3.1-pro-preview}"

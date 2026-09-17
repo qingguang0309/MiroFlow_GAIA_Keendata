@@ -36,6 +36,10 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("google_key"
 # AI Studio project; on the free tier they answer 429.
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME") or os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".mpeg", ".mpg", ".wmv", ".flv", ".3gp")
+# Which API answers visual_question_answering. "auto" keeps the original order (Anthropic, then the OpenAI-compatible
+# endpoint, then Gemini, by which key is set); "anthropic", "openai" or "gemini" forces one. E38 (2026-09-17): the
+# opus config uses gemini, because kimi-k3 took minutes per large image and Moonshot rejects remote image URLs.
+VQA_PROVIDER = os.environ.get("VQA_PROVIDER", "auto").strip().lower()
 
 # Initialize FastMCP server
 setup_mcp_logging(tool_name=os.path.basename(__file__))
@@ -200,6 +204,19 @@ async def call_openai_vision(image_path_or_url: str, question: str) -> str:
         return f"[ERROR]: OpenAI Error: {e}"
 
 
+def _mime_from_bytes(data: bytes, fallback: str) -> str:
+    """Image type from the downloaded bytes; a URL often has no extension, which made every URL "image/jpeg"."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if data.startswith(b"RIFF") and b"WEBP" in data[:16]:
+        return "image/webp"
+    return fallback
+
+
 async def call_gemini_vision(image_path_or_url: str, question: str) -> str:
     """Call Gemini vision API."""
     try:
@@ -234,7 +251,7 @@ async def call_gemini_vision(image_path_or_url: str, question: str) -> str:
 
             image = types.Part.from_bytes(
                 data=image_data,
-                mime_type=mime_type,
+                mime_type=_mime_from_bytes(image_data, mime_type),
             )
     except Exception as e:
         return f"[ERROR]: Failed to get image data {image_path_or_url}: {e}.\nNote: The visual_question_answering tool cannot access to sandbox file, please use the local path provided by original instruction or http url. If you are using http url, make sure it is an image file url."
@@ -288,6 +305,20 @@ async def call_gemini_vision(image_path_or_url: str, question: str) -> str:
                 return f"[ERROR]: Gemini Error: {e}"
 
 
+async def _call_vqa_provider(image_path_or_url: str, prompt: str):
+    """Answer with the provider chosen by VQA_PROVIDER; None when that provider has no key."""
+    provider = VQA_PROVIDER
+    if provider not in ("anthropic", "openai", "gemini"):
+        provider = "anthropic" if ANTHROPIC_API_KEY else "openai" if OPENAI_API_KEY else "gemini"
+    if provider == "anthropic" and ANTHROPIC_API_KEY:
+        return await call_claude_vision(image_path_or_url, prompt)
+    if provider == "openai" and OPENAI_API_KEY:
+        return await call_openai_vision(image_path_or_url, prompt)
+    if provider == "gemini" and GEMINI_API_KEY:
+        return await call_gemini_vision(image_path_or_url, prompt)
+    return None
+
+
 @mcp.tool()
 async def visual_question_answering(image_path_or_url: str, question: str) -> str:
     """This tool is used to ask question about an image or a video and get the answer with Gemini vision language models. It also automatically performs OCR (text extraction) on the image for additional context.
@@ -314,14 +345,9 @@ Remember: Your extraction will be used by someone who cannot see the image thems
 
 Return only the extracted text content, maintaining the original formatting and structure as much as possible. If there is no text in the image, respond with 'No text found'. If there are areas where text may exist but is unreadable or ambiguous, describe these as well."""
 
-    if ANTHROPIC_API_KEY:
-        ocr_result = await call_claude_vision(image_path_or_url, ocr_prompt)
-    elif OPENAI_API_KEY:
-        ocr_result = await call_openai_vision(image_path_or_url, ocr_prompt)
-    elif GEMINI_API_KEY:
-        ocr_result = await call_gemini_vision(image_path_or_url, ocr_prompt)
-    else:
-        return "[ERROR]: No API key is set, visual_question_answering tool is not available."
+    ocr_result = await _call_vqa_provider(image_path_or_url, ocr_prompt)
+    if ocr_result is None:
+        return f"[ERROR]: No API key is set for the VQA provider ({VQA_PROVIDER}), visual_question_answering tool is not available."
 
     vqa_prompt = f"""You are a highly attentive visual analysis assistant. Your task is to carefully examine the image and provide a thorough, accurate answer to the question.
 
@@ -345,14 +371,9 @@ Please provide a comprehensive analysis that demonstrates careful observation an
 """
     # Before answering, carefully analyze both the question and the image. Identify and briefly list potential subtle or easily overlooked VQA pitfalls or ambiguities that could arise in interpreting this question or image (e.g., confusing similar objects, missing small details, misreading text, ambiguous context, etc.). For each, suggest a method or strategy to avoid or mitigate these issues. Only after this analysis, proceed to answer the question, providing a thorough and detailed observation and reasoning process.
 
-    if ANTHROPIC_API_KEY:
-        vqa_result = await call_claude_vision(image_path_or_url, vqa_prompt)
-    elif OPENAI_API_KEY:
-        vqa_result = await call_openai_vision(image_path_or_url, vqa_prompt)
-    elif GEMINI_API_KEY:
-        vqa_result = await call_gemini_vision(image_path_or_url, vqa_prompt)
-    else:
-        return "[ERROR]: No API key is set, visual_question_answering tool is not available."
+    vqa_result = await _call_vqa_provider(image_path_or_url, vqa_prompt)
+    if vqa_result is None:
+        return f"[ERROR]: No API key is set for the VQA provider ({VQA_PROVIDER}), visual_question_answering tool is not available."
 
     return f"OCR results:\n{ocr_result}\n\nVQA result:\n{vqa_result}"
 

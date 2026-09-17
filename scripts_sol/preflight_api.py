@@ -201,7 +201,9 @@ async def main():
         await tool_probe(managers, "tool-reasoning", "reasoning", {"question": "What is 17 multiplied by 23? Reply with the number only."}, expect="391")
     if "tool-image-video" in servers:
         env = tool_env(cfg, "tool-image-video")
-        if env.get("ANTHROPIC_API_KEY"):
+        if (env.get("VQA_PROVIDER") or "auto").lower() == "gemini":
+            print("  note: tool-image-video answers image questions with Gemini (VQA_PROVIDER=gemini)")
+        elif env.get("ANTHROPIC_API_KEY"):
             print("  note: tool-image-video uses Anthropic for VQA (ANTHROPIC_API_KEY is set)")
         elif env.get("OPENAI_API_KEY"):
             lint_pair("tool-image-video(openai-compatible)", env["OPENAI_API_KEY"], env.get("OPENAI_BASE_URL", ""))
