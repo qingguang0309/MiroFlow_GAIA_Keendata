@@ -122,7 +122,12 @@ RUN_BASE=(env ${UNSET[@]+"${UNSET[@]}"} ${ENV_WORDS[@]+"${ENV_WORDS[@]}"} "$UV" 
 if [ "$NO_SMOKE" = "0" ]; then
   SM="${OUT}_smoke_$(date +%m%d_%H%M)"
   N=$(echo "$SMOKE_WL" | tr ',' '\n' | grep -c .)
-  SMOKE=("${RUN_BASE[@]}" "output_dir=$SM" "benchmark.data.whitelist=[$SMOKE_WL]" "benchmark.execution.max_concurrent=$N" ${OVR[@]+"${OVR[@]}"})
+  # E39 (2026-09-20): --override words must come BEFORE the smoke whitelist. They used to come after,
+  # so a run that passed its own benchmark.data.whitelist silently made the smoke run the REAL task set
+  # (8 L3 tasks for an hour) instead of the smoke tasks, and the gate proved nothing. Note the default
+  # SMOKE_WL ids are validation tasks: a run on another benchmark must pass --smoke-wl with ids that
+  # exist there, otherwise the smoke resolves to 0 tasks and check_smoke stops the launch.
+  SMOKE=("${RUN_BASE[@]}" "output_dir=$SM" ${OVR[@]+"${OVR[@]}"} "benchmark.data.whitelist=[$SMOKE_WL]" "benchmark.execution.max_concurrent=$N")
   if [ "$DRY" = "1" ]; then
     say "dry-run: would smoke in tmux '${SESSION}_smoke':$(q "${SMOKE[@]}")"
   else
