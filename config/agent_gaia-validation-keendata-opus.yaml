@@ -20,7 +20,7 @@ main_agent:
     openai_base_url: "${oc.env:OPENAI_BASE_URL,https://api.openai.com/v1}"
     openrouter_api_key: "${oc.env:OPENROUTER_API_KEY,???}"
     openrouter_base_url: "${oc.env:OPENROUTER_BASE_URL,https://openrouter.ai/api/v1}"
-    openrouter_provider: ""
+    openrouter_provider: "${oc.env:OPENROUTER_PROVIDER,anthropic}"  # E39: pin to Anthropic direct; auto-routing landed on Bedrock, whose guardrail returned finish_reason=content_filter on ordinary payloads
     disable_cache_control: false
     keep_tool_result: -1
     oai_tool_thinking: false
@@ -61,7 +61,7 @@ sub_agents:
       openai_base_url: "${oc.env:OPENAI_BASE_URL,https://api.openai.com/v1}"
       openrouter_api_key: "${oc.env:OPENROUTER_API_KEY,???}"
       openrouter_base_url: "${oc.env:OPENROUTER_BASE_URL,https://openrouter.ai/api/v1}"
-      openrouter_provider: ""
+      openrouter_provider: "${oc.env:OPENROUTER_PROVIDER,anthropic}"  # E39: pin to Anthropic direct; auto-routing landed on Bedrock, whose guardrail returned finish_reason=content_filter on ordinary payloads
       disable_cache_control: false
       keep_tool_result: -1
       oai_tool_thinking: false

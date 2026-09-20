@@ -12,7 +12,7 @@ are never blocking.
 
 Categories:
   persistent (a key, account, model or tool backend is broken; never fixes itself):
-             quota, auth, model, tool_infra
+             quota, auth, model, tool_infra, filtered
   transient  (may clear on retry): rate, server, conn, timeout, request400
   tool_error (content-level tool outcome, not blocking)
 
@@ -24,13 +24,13 @@ silently, for the whole run.
 """
 import re
 
-PERSISTENT = {"quota", "auth", "model", "tool_infra"}
+PERSISTENT = {"quota", "auth", "model", "tool_infra", "filtered"}
 TRANSIENT = {"rate", "server", "conn", "timeout", "request400"}
 
 # Evidence that a text is an error report rather than page content containing words like "Unauthorized".
 ERROR_CONTEXT = re.compile(
     r"\[ERROR\]|Error code: \d{3}|failed after \d+ (retries|attempts)|after \d+ attempts|Failed to (create|connect)|"
-    r"Serper API error|Jina|OpenAI Error|Gemini Error|Claude Error|[A-Za-z]+Error\b|'error':|\"error\":",
+    r"Serper API error|Jina|OpenAI Error|Gemini Error|Claude Error|[A-Za-z]+Error\b|'error':|\"error\":|content_filter",
     re.I,
 )
 
@@ -54,6 +54,9 @@ SIGNATURES = [
     ("tool_infra", re.compile(
         r"Failed to connect to [\w.-]+ server|No such file or directory: '(uv|uvx|npx|node)'|"
         r"Cannot connect or get tools from server", re.I)),
+    ("filtered", re.compile(
+        r"finish_reason=content_filter|unsupported finish reason: content_filter|"
+        r"blocked by the provider content filter", re.I)),
     ("rate", re.compile(r"Error code: 429|RateLimitError|Too Many Requests|Rate limit (exceeded|reached)|\b429: |RESOURCE_EXHAUSTED", re.I)),
     ("server", re.compile(
         r"Error code: 5\d\d|InternalServerError|Internal Server Error|Service (temporarily )?Unavailable|Bad Gateway|"

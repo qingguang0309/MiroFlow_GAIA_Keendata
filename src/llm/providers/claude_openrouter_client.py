@@ -186,6 +186,25 @@ class ClaudeOpenRouterClient(LLMProviderClientBase):
 
             if (
                 response.choices
+                and response.choices[0].finish_reason == "content_filter"
+            ):
+                # E39 (2026-09-20): with openrouter_provider unset, OpenRouter routed opus to a
+                # Bedrock backend whose guardrail answered ordinary agent payloads with
+                # finish_reason=content_filter and empty content. This used to fall through to
+                # process_llm_response, which only appended "unsupported finish reason" to the
+                # history, so the agent kept working blind for hours and produced pure guesses.
+                # Raising here gives it the decorator's 8 retries, and a survivor reaches the task
+                # log as "OpenRouter LLM call failed: ... content_filter", which the guard greps.
+                logger.debug(
+                    "LLM finish_reason is 'content_filter', triggering Error"
+                )
+                raise Exception(
+                    "LLM call blocked by the provider content filter "
+                    "(finish_reason=content_filter)"
+                )
+
+            if (
+                response.choices
                 and response.choices[0].finish_reason == "stop"
                 and response.choices[0].message.content.strip() == ""
             ):

@@ -2,7 +2,7 @@
 # In-run guard for a MiroFlow run started by launch_gated.sh.
 #  1) API-anomaly tripwire, every 5 min:
 #     - tool results in task files touched since launch (scan_trace_errors.py), and
-#     - failed main/sub-model calls (HTTP 401/402/403) in the per-task logs, which tool-result
+#     - failed main/sub-model calls (HTTP 401/402/403, or a provider content filter) in the per-task logs, which tool-result
 #       scanning cannot see.
 #     Any NEW blocking error freezes the run and writes FROZEN_API_ANOMALY. Resume only by hand
 #     after investigating.
@@ -24,7 +24,7 @@ D=$1; SESS=$2; FLOOR=${3:-15}; T0=${4:-$(date +%s)}
 cd "$(dirname "$0")/.." || exit 1
 PY=.venv/bin/python
 OK=$(grep -E "^OPENROUTER_API_KEY=" .env | cut -d= -f2- | tr -d "\"' ")
-LLM_ERR='LLM call failed: .*Error code: 40[123]|requires more credits'
+LLM_ERR='LLM call failed: .*(Error code: 40[123]|content_filter)|requires more credits'
 
 log() { echo "$(date '+%F %T') $*" >> "$D/guard.log"; }
 rem() {
