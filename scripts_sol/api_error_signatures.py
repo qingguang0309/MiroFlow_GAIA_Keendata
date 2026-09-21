@@ -36,8 +36,23 @@ ERROR_CONTEXT = re.compile(
 
 # Failures of something that is not our provider: a scraped site's own status, or HTTP
 # errors raised by code the agent ran.
+# Our own provider hosts. A status reported "for url: <one of these>" is ours; anything else is the
+# fetched site's own status. r.jina.ai is deliberately absent: its URL embeds the target
+# (r.jina.ai/https://site/...), so its status reflects the target, not our Jina account. Real Jina
+# account failures say so in words ("Jina ... api key/quota/balance") and are matched by SIGNATURES.
+OUR_HOSTS = (
+    r"openrouter\.ai|api\.moonshot\.cn|generativelanguage\.googleapis\.com|api\.openai\.com|"
+    r"google\.serper\.dev|[\w.-]*\.e2b\.(?:dev|app)|api\.anthropic\.com"
+)
+
+# Failures of something that is not our provider: a scraped site's own status, or HTTP
+# errors raised by code the agent ran.
+# E39 (2026-09-20): the requests raise_for_status() wording was missing, so a paywalled news site
+# answering "402 Client Error: Payment Required for url: https://people.com/..." was classified as
+# our own quota being exhausted and froze a run on its first occurrence.
 THIRD_PARTY = re.compile(
-    r"Target URL returned error|HTTPSConnectionPool\(host=|HTTP Error \d{3}:|urllib3?\.exceptions|requests\.exceptions",
+    r"Target URL returned error|HTTPSConnectionPool\(host=|HTTP Error \d{3}:|urllib3?\.exceptions|requests\.exceptions|"
+    r"\d{3} (?:Client|Server) Error:[^\n]{0,120}? for url: (?!https?://(?:[\w.-]*\.)?(?:" + OUR_HOSTS + r"))",
     re.I,
 )
 
