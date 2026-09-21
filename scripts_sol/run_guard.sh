@@ -19,7 +19,9 @@
 #
 # Usage: run_guard.sh <run_dir> <tmux_session> [floor=15] [start_epoch=now]
 # Manual resume after an API-anomaly freeze has been investigated:
-#   kill -CONT $(pgrep -f "output_dir=<run_dir>( |$)") && rm <run_dir>/FROZEN_API_ANOMALY
+#   bash scripts_sol/resume_run.sh <run_dir>   (CONTs the whole frozen tree, incl. MCP children,
+#                                              and removes the marker; a bare pgrep on output_dir=
+#                                              misses the MCP children and leaves them stopped)
 D=$1; SESS=$2; FLOOR=${3:-15}; T0=${4:-$(date +%s)}
 cd "$(dirname "$0")/.." || exit 1
 PY=.venv/bin/python
@@ -143,7 +145,9 @@ while true; do
             cat "$D"/task_logs/*.log 2>/dev/null | grep -E "$LLM_ERR" | tail -3 | cut -c1-300
           fi
           echo
-          echo "after investigating: kill -CONT \$(pgrep -f 'output_dir=$D( |\$)') && rm $D/FROZEN_API_ANOMALY"
+          echo "after investigating: bash scripts_sol/resume_run.sh $D"
+          echo "(do NOT resume with a bare 'pgrep -f output_dir=': it misses the MCP server children,"
+          echo " which stay stopped and make every in-flight tool call hang until its 900s timeout)"
         } > "$D/FROZEN_API_ANOMALY"
         log "API anomaly detected: $(echo "$out" | grep -E '^  BLOCK' | head -3 | tr -s ' ' | tr '\n' ';') model-call errors $LLM_BASE->$n"
         freeze "API anomaly"
