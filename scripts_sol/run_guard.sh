@@ -26,7 +26,14 @@ D=$1; SESS=$2; FLOOR=${3:-15}; T0=${4:-$(date +%s)}
 cd "$(dirname "$0")/.." || exit 1
 PY=.venv/bin/python
 OK=$(grep -E "^OPENROUTER_API_KEY=" .env | cut -d= -f2- | tr -d "\"' ")
-LLM_ERR='LLM call failed: .*(Error code: 40[123]|content_filter)|requires more credits'
+# Hard failures never fix themselves (a key, a bill): freeze on the first new one.
+LLM_ERR='LLM call failed: .*Error code: 40[123]|requires more credits'
+# A provider content filter is different (E39): the client now retries it 8 times, and a lone hit is
+# absorbed without the agent ever working blind. 2026-09-21 saw 1 self-healed hit in 40 minutes after
+# the summary prompt was reworded, versus 43 in 10 minutes before. Freeze only on a burst, which is
+# what a systemic block looks like; a single retried hit must not stop a run.
+LLM_SOFT='LLM call failed: .*content_filter'
+LLM_SOFT_MAX=${LLM_SOFT_MAX:-5}
 
 log() { echo "$(date '+%F %T') $*" >> "$D/guard.log"; }
 rem() {
@@ -93,6 +100,7 @@ resume() {  # $1 = reason
   log "RESUMED ($1): pids $pids"
 }
 llm_err_count() { cat "$D"/task_logs/*.log 2>/dev/null | grep -cE "$LLM_ERR"; }
+llm_soft_count() { cat "$D"/task_logs/*.log 2>/dev/null | grep -cE "$LLM_SOFT"; }
 
 WAIVE_ARGS=()
 if [ -f "$D/.trace_waivers" ]; then
@@ -116,6 +124,7 @@ else
 fi
 
 LLM_BASE=$(llm_err_count)
+SOFT_BASE=$(llm_soft_count)
 last_scan=0
 anomaly_was_set=0
 while true; do
@@ -126,7 +135,7 @@ while true; do
     anomaly_was_set=1
   else
     if [ "$anomaly_was_set" = "1" ]; then
-      LLM_BASE=$(llm_err_count); anomaly_was_set=0
+      LLM_BASE=$(llm_err_count); SOFT_BASE=$(llm_soft_count); anomaly_was_set=0
       log "API-anomaly marker removed by hand; model-call error baseline reset to $LLM_BASE"
     fi
     if [ $((now - last_scan)) -ge 300 ]; then
@@ -135,8 +144,8 @@ while true; do
       # transient ones once they recur in >=3 tasks, since single transient errors occur dozens of
       # times in a normal 165-task run (f3).
       out=$($PY scripts_sol/scan_trace_errors.py "$D" --since "$T0" --state "$D/.trace_state.json" --transient-min-tasks 3 ${WAIVE_ARGS[@]+"${WAIVE_ARGS[@]}"} 2>&1); rc=$?
-      n=$(llm_err_count)
-      if [ "$rc" = "1" ] || [ "$n" -gt "$LLM_BASE" ]; then
+      n=$(llm_err_count); sn=$(llm_soft_count); soft_new=$((sn - SOFT_BASE))
+      if [ "$rc" = "1" ] || [ "$n" -gt "$LLM_BASE" ] || [ "$soft_new" -ge "$LLM_SOFT_MAX" ]; then
         {
           echo "frozen at $(date '+%F %T')"
           [ "$rc" = "1" ] && echo "$out"
@@ -144,12 +153,16 @@ while true; do
             echo "failed model calls (401/402/403) in task logs: $LLM_BASE -> $n"
             cat "$D"/task_logs/*.log 2>/dev/null | grep -E "$LLM_ERR" | tail -3 | cut -c1-300
           fi
+          if [ "$soft_new" -ge "$LLM_SOFT_MAX" ]; then
+            echo "content-filter blocks in task logs: $soft_new new (threshold $LLM_SOFT_MAX)"
+            cat "$D"/task_logs/*.log 2>/dev/null | grep -E "$LLM_SOFT" | tail -3 | cut -c1-300
+          fi
           echo
           echo "after investigating: bash scripts_sol/resume_run.sh $D"
           echo "(do NOT resume with a bare 'pgrep -f output_dir=': it misses the MCP server children,"
           echo " which stay stopped and make every in-flight tool call hang until its 900s timeout)"
         } > "$D/FROZEN_API_ANOMALY"
-        log "API anomaly detected: $(echo "$out" | grep -E '^  BLOCK' | head -3 | tr -s ' ' | tr '\n' ';') model-call errors $LLM_BASE->$n"
+        log "API anomaly detected: $(echo "$out" | grep -E '^  BLOCK' | head -3 | tr -s ' ' | tr '\n' ';') model-call errors $LLM_BASE->$n content-filter new $soft_new/$LLM_SOFT_MAX"
         freeze "API anomaly"
         anomaly_was_set=1
       elif [ "$rc" != "0" ]; then
