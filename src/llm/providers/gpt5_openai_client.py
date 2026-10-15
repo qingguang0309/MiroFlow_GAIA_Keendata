@@ -137,10 +137,11 @@ class GPT5OpenAIClient(LLMProviderClientBase):
             if self.repetition_penalty != 1.0:
                 extra_body["repetition_penalty"] = self.repetition_penalty
 
-            # Accept gpt-5 family variants (e.g. gpt-5.6 on internal routers), not
-            # just the two official OpenAI ids the upstream whitelist allowed.
-            assert self.model_name.startswith(("gpt-5", "openai/gpt-5")), (
-                f"GPT5OpenAIClient expects a gpt-5 family model, got {self.model_name!r}"
+            # Accept gpt-5 / gpt-6 family variants (e.g. gpt-5.6 on internal routers,
+            # openai/gpt-6.1-sol on OpenRouter), not just the two official OpenAI ids
+            # the upstream whitelist allowed.
+            assert self.model_name.startswith(("gpt-5", "openai/gpt-5", "gpt-6", "openai/gpt-6")), (
+                f"GPT5OpenAIClient expects a gpt-5 or gpt-6 family model, got {self.model_name!r}"
             )
             params = {
                 "model": self.model_name,
