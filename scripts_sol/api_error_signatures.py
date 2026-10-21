@@ -60,9 +60,12 @@ SIGNATURES = [
     ("quota", re.compile(
         r"suspended due to insufficient balance|exceeded_current_quota|insufficient[_ ](balance|credits|quota)|"
         r"Error code: 402|Payment Required", re.I)),
+    # E51 (2026-10-21): bare "PermissionDenied" matched a scraped Wikipedia API reply
+    # ({"error":{"code":"permissiondenied",...}} for deleted revisions) and froze a run. Only the SDK
+    # exception name counts; a real 403 from our provider also says "Error code: 403".
     ("auth", re.compile(
         r"Error code: 40[13]\b|invalid_authentication|Invalid Authentication|Incorrect API key|invalid[_ ]api[_ ]key|"
-        r"API_KEY_DISABLED|API key is disabled|AuthenticationError|PermissionDenied|violation of provider Terms", re.I)),
+        r"API_KEY_DISABLED|API key is disabled|AuthenticationError|PermissionDeniedError|violation of provider Terms", re.I)),
     ("model", re.compile(
         r"is no longer available|model[_ ]not[_ ]found|does not exist or you do not have access|404 NOT_FOUND|"
         r"No endpoints found for", re.I)),
