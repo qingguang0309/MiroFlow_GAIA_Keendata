@@ -219,6 +219,7 @@ debug.py
 # local secret backups (never commit)
 .env.*.bak
 .env*.bak
+.env.bak*
 
 # scratch outputs from ad-hoc runs (AWS deployment)
 tmp_outputs/
