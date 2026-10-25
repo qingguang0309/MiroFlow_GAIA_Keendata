@@ -12,7 +12,9 @@ from src.llm.client import LLMClient
 from src.logging.logger import bootstrap_logger
 from src.logging.task_tracer import TaskTracer
 from src.core.orchestrator import Orchestrator
+from src.tool.asof import as_of_context
 from src.tool.manager import ToolManager
+from src.tool.recorder import ToolCallRecorder
 from src.utils.io_utils import OutputFormatter
 from src.utils.tool_utils import create_mcp_server_parameters
 
@@ -112,11 +114,22 @@ async def execute_task_pipeline(
         )
 
         task_log.status = "running"
-        final_answer, final_boxed_answer = await orchestrator.run_main_agent(
-            task_description=task_description,
-            task_file_name=task_file_name,
-            task_id=task_id,
-        )
+        recorder = main_agent_tool_manager.recorder
+        if recorder is not None:
+            record_path = recorder.begin_task(task_id)
+            task_log.log_step(
+                "tool_recording", f"Recording tool calls to {record_path}"
+            )
+        # Point-in-time tasks carry metadata.as_of: tool servers and prompts see that clock.
+        as_of = (metadata or {}).get("as_of")
+        if as_of:
+            task_log.log_step("as_of", f"Decision time (as-of): {as_of}")
+        with as_of_context(as_of):
+            final_answer, final_boxed_answer = await orchestrator.run_main_agent(
+                task_description=task_description,
+                task_file_name=task_file_name,
+                task_id=task_id,
+            )
 
         task_log.final_boxed_answer = final_boxed_answer
         task_log.status = "completed"
@@ -170,6 +183,18 @@ def create_pipeline_components(cfg: DictConfig, logs_dir: str | None = None):
     Returns:
         Tuple of (main_agent_tool_manager, sub_agent_tool_managers, output_formatter)
     """
+    # One recorder shared by all agents, so a task's calls land in one file in call order
+    recorder = None
+    recording_cfg = cfg.get("tool_recording", None)
+    if recording_cfg is not None and recording_cfg.get("enabled", False):
+        record_dir = recording_cfg.get("dir", None) or os.path.join(
+            logs_dir or cfg.output_dir, "tool_records"
+        )
+        recorder = ToolCallRecorder(
+            record_dir, tags=dict(recording_cfg.get("tags", None) or {})
+        )
+        logger.info(f"Tool-call recording enabled: {record_dir}")
+
     # Create ToolManagers for main agent and sub-agents
     main_agent_mcp_server_configs, main_agent_blacklist = create_mcp_server_parameters(
         cfg, cfg.main_agent, logs_dir
@@ -177,6 +202,8 @@ def create_pipeline_components(cfg: DictConfig, logs_dir: str | None = None):
     main_agent_tool_manager = ToolManager(
         main_agent_mcp_server_configs,
         tool_blacklist=main_agent_blacklist,
+        agent_name="main",
+        recorder=recorder,
     )
 
     sub_agent_tool_managers = {}
@@ -188,6 +215,8 @@ def create_pipeline_components(cfg: DictConfig, logs_dir: str | None = None):
             sub_agent_tool_manager = ToolManager(
                 sub_agent_mcp_server_configs,
                 tool_blacklist=sub_agent_blacklist,
+                agent_name=sub_agent,
+                recorder=recorder,
             )
             sub_agent_tool_managers[sub_agent] = sub_agent_tool_manager
 

@@ -1,0 +1,9 @@
+name: "tool-asof-fetch"
+tool_command: "python"
+args:
+  - "-m"
+  - "src.tool.mcp_servers.asof_fetch_mcp_server"
+env:
+# Point-in-time page reading (latest Wayback capture at or before the task's AS_OF, injected
+# per task by ToolManager). No live-web fallback.
+  ASOF_FETCH_MAX_CHARS: "${oc.env:ASOF_FETCH_MAX_CHARS,40000}"

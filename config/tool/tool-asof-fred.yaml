@@ -1,0 +1,9 @@
+name: "tool-asof-fred"
+tool_command: "python"
+args:
+  - "-m"
+  - "src.tool.mcp_servers.asof_fred_mcp_server"
+env:
+# Point-in-time macro data (ALFRED vintages). The decision time is NOT configured here:
+# ToolManager injects AS_OF per task from task metadata, and the server refuses to run without it.
+  FRED_API_KEY: "${oc.env:FRED_API_KEY,}"

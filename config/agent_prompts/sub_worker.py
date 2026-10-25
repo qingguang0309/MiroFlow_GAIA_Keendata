@@ -1,5 +1,5 @@
 from config.agent_prompts.base_agent_prompt import BaseAgentPrompt
-import datetime
+from src.tool.asof import decision_date_str
 from typing import Any
 
 
@@ -16,7 +16,7 @@ class SubAgentWorkerPrompt(BaseAgentPrompt):
     def generate_system_prompt_with_mcp_tools(
         self, mcp_servers: list[Any], chinese_context: bool = False
     ) -> str:
-        formatted_date = datetime.datetime.today().strftime("%Y-%m-%d")
+        formatted_date = decision_date_str()
 
         prompt = f"""In this environment you have access to a set of tools you can use to answer the user's question. 
 
@@ -279,7 +279,7 @@ class SubAgentWorkerPromptDeepSeek(SubAgentWorkerPrompt):
     def generate_system_prompt_with_mcp_tools(
         self, mcp_servers: list[Any], chinese_context: bool = False
     ) -> str:
-        formatted_date = datetime.datetime.today().strftime("%Y-%m-%d")
+        formatted_date = decision_date_str()
 
         prompt = f"""In this environment you have access to a set of tools you can use to answer the user's question. 
 

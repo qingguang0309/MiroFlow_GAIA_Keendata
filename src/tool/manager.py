@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
+import datetime
 import functools
+import time
 from typing import Any, Awaitable, Callable, Protocol, TypeVar
 
 from mcp import ClientSession, StdioServerParameters  # (already imported in config.py)
@@ -11,7 +13,9 @@ from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 
 from src.logging.logger import bootstrap_logger
+from src.tool.asof import AS_OF_ENV, current_as_of, format_as_of
 from .mcp_servers.browser_session import PlaywrightSession
+from .recorder import ToolCallRecorder
 
 import os
 
@@ -25,13 +29,20 @@ def update_server_params_with_context_var(
     server_params: StdioServerParameters,
 ) -> StdioServerParameters:
     """
-    Update the server params with the context var.
+    Return a copy of the server params carrying the current task's context vars.
+
+    The params object is shared by all concurrent tasks, so it is copied rather than
+    mutated: otherwise one task could spawn its tool subprocess with another task's AS_OF.
     """
     from src.logging.logger import TASK_CONTEXT_VAR
 
+    env = dict(server_params.env or {})
     if TASK_CONTEXT_VAR.get() is not None:
-        server_params.env["TASK_ID"] = TASK_CONTEXT_VAR.get()
-    return server_params
+        env["TASK_ID"] = TASK_CONTEXT_VAR.get()
+    as_of = current_as_of()
+    if as_of is not None:
+        env[AS_OF_ENV] = format_as_of(as_of)
+    return server_params.model_copy(update={"env": env})
 
 
 def with_timeout(timeout_s: float = 300.0):
@@ -64,10 +75,18 @@ class ToolManagerProtocol(Protocol):
 
 
 class ToolManager(ToolManagerProtocol):
-    def __init__(self, server_configs, tool_blacklist=None):
+    def __init__(
+        self,
+        server_configs,
+        tool_blacklist=None,
+        agent_name: str = "main",
+        recorder: ToolCallRecorder | None = None,
+    ):
         """
         Initialize ToolManager.
         :param server_configs: List returned by create_server_parameters()
+        :param agent_name: Which agent this manager serves; written into tool-call records
+        :param recorder: When set, every tool call and its response is recorded
         """
         self.server_configs = server_configs
         self.server_dict = {
@@ -75,6 +94,8 @@ class ToolManager(ToolManagerProtocol):
         }
         self.browser_session = None
         self.tool_blacklist = tool_blacklist if tool_blacklist else set()
+        self.agent_name = agent_name
+        self.recorder = recorder
 
         logger.info(
             f"ToolManager initialized, loaded servers: {list(self.server_dict.keys())}"
@@ -251,8 +272,44 @@ class ToolManager(ToolManagerProtocol):
 
         return all_servers_for_prompt
 
-    @with_timeout(900)
     async def execute_tool_call(self, server_name, tool_name, arguments) -> Any:
+        """
+        Execute a single tool call, recording it when a recorder is attached.
+        """
+        if self.recorder is None:
+            return await self._execute_tool_call(server_name, tool_name, arguments)
+        started_at = datetime.datetime.now()
+        t0 = time.monotonic()
+        try:
+            response = await self._execute_tool_call(server_name, tool_name, arguments)
+        except Exception as e:
+            response = {
+                "server_name": server_name,
+                "tool_name": tool_name,
+                "error": f"{type(e).__name__}: {e}",
+            }
+            self._record(server_name, tool_name, arguments, response, started_at, t0)
+            raise
+        self._record(server_name, tool_name, arguments, response, started_at, t0)
+        return response
+
+    def _record(self, server_name, tool_name, arguments, response, started_at, t0):
+        try:
+            self.recorder.record(
+                agent_name=self.agent_name,
+                server_name=server_name,
+                tool_name=tool_name,
+                arguments=arguments,
+                response=response,
+                started_at=started_at,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+            )
+        except Exception as e:
+            # A recording failure must not change what the agent sees.
+            logger.error(f"Tool-call recording failed: {e}")
+
+    @with_timeout(900)
+    async def _execute_tool_call(self, server_name, tool_name, arguments) -> Any:
         """
         Execute a single tool call.
         :param server_name: Server name
@@ -282,7 +339,7 @@ class ToolManager(ToolManagerProtocol):
 
                 try:
                     # Recursive call, using the correct server name
-                    corrected_result = await self.execute_tool_call(
+                    corrected_result = await self._execute_tool_call(
                         correct_server, tool_name, arguments
                     )
 
@@ -462,7 +519,7 @@ class ToolManager(ToolManagerProtocol):
                         logger.info(
                             f"Auto-correction: Tool '{tool_name}' not found in '{server_name}', trying '{suggested_servers[0]}'"
                         )
-                        return await self.execute_tool_call(
+                        return await self._execute_tool_call(
                             suggested_servers[0], tool_name, arguments
                         )
 
